@@ -7,7 +7,7 @@ import VideoPlayer from '../components/VideoPlayer.vue'
 import { getHomeConfig } from '../api/config'
 import type { Config } from '../types'
 import SearchResults from '../components/SearchResults.vue'
-import { BookmarkIcon } from '@heroicons/vue/24/outline'
+import { BookmarkIcon, MagnifyingGlassIcon, ArrowPathIcon, PlayIcon } from '@heroicons/vue/24/outline'
 import router from '@/router'
 
 // 默认配置
@@ -18,7 +18,8 @@ const defaultConfig: Config = {
   enableLogin: false,
   loginPassword: '',
   announcement: '',
-  customTitle: ''
+  customTitle: '',
+  enableHealthFilter: true
 }
 
 const route = useRoute()
@@ -45,11 +46,11 @@ const MAX_RATIO = 0.75 // 最大比例 75%
 // 计算标题
 const pageTitle = computed(() => {
   if (!config.value?.customTitle) {
-    return '简单视频播放器'
+    return null // 返回null表示使用默认图标
   }
   const title = String(config.value.customTitle).trim()
-  if (title === 'false' || title === '') {
-    return ''
+  if (title === '') {
+    return null // 返回null表示使用默认图标
   }
   return title
 })
@@ -252,12 +253,19 @@ const handleEnterPlay = () => {
       <nav class="w-full px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         <!-- 顶部栏 -->
         <div class="flex items-center">
-          <h1 class="text-xl font-bold text-text-light dark:text-text-dark whitespace-nowrap">{{ pageTitle }}</h1>
+          <h1 class="text-xl font-bold text-text-light dark:text-text-dark whitespace-nowrap flex items-center">
+            <template v-if="pageTitle">{{ pageTitle }}</template>
+            <template v-else>
+              <PlayIcon class="w-6 h-6" />
+            </template>
+          </h1>
           
           <!-- 公告栏 -->
-          <div v-if="config?.announcement" class="flex-1 px-4 text-center text-sm text-primary-light dark:text-primary-dark truncate">
+          <div v-if="config?.announcement" class="flex-1 px-4 text-center text-sm text-gray-500 dark:text-gray-400 truncate">
             {{ config.announcement }}
           </div>
+          <!-- 无公告时的占位符 -->
+          <div v-else class="flex-1"></div>
 
           <button
             @click="toggleTheme"
@@ -289,13 +297,13 @@ const handleEnterPlay = () => {
                 @keyup.enter="handleEnterPlay"
                 type="text"
                 placeholder="请输入视频链接"
-                class="flex-1 p-2 rounded border-[0.5px] border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
+                class="flex-1 p-2 rounded border-[0.5px] border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
               />
               <button
                 @click="handlePlay"
-                class="px-4 py-2 rounded bg-primary-light dark:bg-primary-dark text-white whitespace-nowrap hover:bg-primary-light/90 dark:hover:bg-primary-dark/90 active:scale-95"
+                class="px-4 py-2 rounded bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 dark:hover:text-white border border-gray-200 dark:border-gray-700 hover:border-primary-light dark:hover:border-primary-dark shadow-sm hover:shadow font-medium active:scale-95 flex items-center justify-center"
               >
-                刷新
+                <ArrowPathIcon class="w-5 h-5" />
               </button>
             </div>
 
@@ -355,16 +363,16 @@ const handleEnterPlay = () => {
                 @keyup.enter="handleSearch"
                 class="flex-1 p-2 rounded border-[0.5px] border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
               />
-              <div class="flex gap-2">
+              <div class="flex gap-2 justify-between w-full sm:w-auto">
                 <button
                   @click="handleSearch"
-                  class="px-4 py-2 rounded bg-primary-light dark:bg-primary-dark text-white whitespace-nowrap hover:bg-primary-light/90 dark:hover:bg-primary-dark/90 active:scale-95"
+                  class="px-4 py-2 rounded bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 dark:hover:text-white border border-gray-200 dark:border-gray-700 hover:border-primary-light dark:hover:border-primary-dark shadow-sm hover:shadow font-medium active:scale-95 flex items-center justify-center"
                 >
-                  搜索
+                  <MagnifyingGlassIcon class="w-5 h-5" />
                 </button>
                 <button
                   @click="handleShowTags"
-                  class="px-4 py-2 rounded bg-gray-500 dark:bg-gray-600 text-white whitespace-nowrap hover:bg-gray-600 dark:hover:bg-gray-700 active:scale-95 flex items-center"
+                  class="px-4 py-2 rounded bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 dark:hover:text-white border border-gray-200 dark:border-gray-700 hover:border-primary-light dark:hover:border-primary-dark shadow-sm hover:shadow font-medium active:scale-95 flex items-center justify-center"
                 >
                   <BookmarkIcon class="w-5 h-5" />
                 </button>
@@ -376,6 +384,7 @@ const handleEnterPlay = () => {
               v-if="config?.resourceSites?.length"
               :sites="config.resourceSites"
               :keyword="searchKeyword"
+              :enable-health-filter="config.enableHealthFilter"
               ref="searchResults"
               @updateVideoUrl="handleVideoUrlUpdate"
             />

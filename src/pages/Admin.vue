@@ -16,7 +16,8 @@ const config = ref<Config>({
   enableLogin: false,
   loginPassword: '',
   announcement: '',
-  customTitle: ''
+  customTitle: '',
+  enableHealthFilter: true
 })
 
 const isDialogOpen = ref(false)
@@ -34,6 +35,11 @@ const loadConfig = async () => {
   try {
     const configData = await getAdminConfig()
     config.value = configData
+    
+    // 如果没有健康过滤设置，默认为开启
+    if (config.value.enableHealthFilter === undefined) {
+      config.value.enableHealthFilter = true
+    }
     
     // 如果有密码，解密后存储到 plainPassword
     if (config.value.loginPassword) {
@@ -862,12 +868,12 @@ const handleImportConfig = async () => {
       <div class="space-y-6">
         <!-- 资源站点配置 -->
         <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
-          <div class="flex flex-wrap justify-between items-center gap-4 mb-4">
-            <div class="flex items-center gap-2">
+          <div class="flex flex-col sm:flex-row flex-wrap justify-between items-center gap-4 mb-4">
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
               <el-icon class="text-xl text-primary-light dark:text-primary-dark"><Link /></el-icon>
               <h2 class="text-xl font-semibold">资源站点配置</h2>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-end flex-wrap">
               <button
                 @click="handleExportConfig"
                 class="px-4 py-2 bg-orange-500 text-white rounded hover:opacity-90"
@@ -900,20 +906,20 @@ const handleImportConfig = async () => {
                   <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-light dark:peer-checked:bg-primary-dark"></div>
                   <span class="sr-only">激活/暂停</span>
                 </label>
-                <div class="flex-1 flex flex-col sm:flex-row gap-2 min-w-0">
-                  <div class="w-[40%] min-w-0 p-2 rounded bg-gray-50 dark:bg-gray-700/30 flex items-center">
+                <div class="flex-1 flex flex-col sm:flex-row gap-2 min-w-0 w-full">
+                  <div class="w-full sm:w-[40%] min-w-0 p-2 rounded bg-gray-50 dark:bg-gray-700/30 flex items-center">
                     <div class="truncate" :title="site.url">{{ site.url }}</div>
                   </div>
-                  <div class="w-[30%] min-w-0 p-2 rounded bg-gray-50 dark:bg-gray-700/30">
+                  <div class="w-full sm:w-[30%] min-w-0 p-2 rounded bg-gray-50 dark:bg-gray-700/30">
                     <div class="text-sm text-gray-500 dark:text-gray-400">搜索列表元素类名</div>
                     <div class="truncate" :title="site.searchResultClass || '无'">{{ site.searchResultClass || '无' }}</div>
                   </div>
-                  <div class="w-[30%] min-w-0 p-2 rounded bg-gray-50 dark:bg-gray-700/30">
+                  <div class="w-full sm:w-[30%] min-w-0 p-2 rounded bg-gray-50 dark:bg-gray-700/30">
                     <div class="text-sm text-gray-500 dark:text-gray-400">备注</div>
                     <div class="truncate" :title="site.remark || '无备注'">{{ site.remark || '无备注' }}</div>
                   </div>
                 </div>
-                <div class="flex gap-2 shrink-0">
+                <div class="flex gap-2 shrink-0 mt-2 sm:mt-0">
                   <button
                     @click="editResourceSite(index)"
                     class="h-10 w-10 flex items-center justify-center bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
@@ -993,6 +999,21 @@ const handleImportConfig = async () => {
                 </button>
               </div>
             </div>
+            
+            <!-- 健康过滤开关 -->
+            <label class="flex items-center gap-3 cursor-pointer p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg group">
+              <div class="relative">
+                <input
+                  v-model="config.enableHealthFilter"
+                  type="checkbox"
+                  class="sr-only peer"
+                />
+                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-light dark:peer-checked:bg-primary-dark"></div>
+              </div>
+              <span class="text-gray-700 dark:text-gray-200 group-hover:text-primary-light dark:group-hover:text-primary-dark transition-colors">
+                启用健康过滤（搜索时，根据分类过滤掉不健康的资源，有的站点没有不健康的分类就过滤不了）
+              </span>
+            </label>
           </div>
         </div>
 
@@ -1023,7 +1044,7 @@ const handleImportConfig = async () => {
                 v-model="config.customTitle"
                 type="text"
                 class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-                placeholder="不配置则使用默认名称，值为false则不显示名称"
+                placeholder="不配置则使用默认图标"
               />
             </div>
 
