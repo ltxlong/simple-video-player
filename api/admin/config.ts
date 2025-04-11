@@ -13,7 +13,8 @@ const defaultConfig: Config = {
   enableLogin: process.env.ENABLE_LOGIN === 'true',
   loginPassword: process.env.LOGIN_PASSWORD || '',
   announcement: process.env.ANNOUNCEMENT || '',
-  customTitle: process.env.CUSTOM_TITLE || ''
+  customTitle: process.env.CUSTOM_TITLE || '',
+  enableHealthFilter: process.env.ENABLE_HEALTH_FILTER === 'true'
 }
 
 // 验证JWT令牌
