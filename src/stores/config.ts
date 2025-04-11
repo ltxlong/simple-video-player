@@ -8,6 +8,7 @@ interface Config {
   loginPassword: string
   announcement: string
   customTitle: string
+  enableHealthFilter: boolean
 }
 
 export const useConfigStore = defineStore('config', {
@@ -18,7 +19,8 @@ export const useConfigStore = defineStore('config', {
     enableLogin: false,
     loginPassword: '',
     announcement: '',
-    customTitle: ''
+    customTitle: '',
+    enableHealthFilter: true
   }),
 
   actions: {
