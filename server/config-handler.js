@@ -9,7 +9,8 @@ export const defaultConfig = {
   enableLogin: false,
   loginPassword: '',
   announcement: '',
-  customTitle: ''
+  customTitle: '',
+  enableHealthFilter: true
 }
 
 /**

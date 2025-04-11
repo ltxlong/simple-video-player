@@ -1,6 +1,8 @@
 import express from 'express'
 import cors from 'cors'
 import session from 'express-session'
+import http from 'http'
+import https from 'https'
 import { getConfig, updateConfig, getPublicConfig, verifyPassword } from './config-handler.js'
 import { handleSearchRequest } from './search-handler.js'
 import dotenv from 'dotenv'
@@ -250,6 +252,158 @@ app.get('/api/home/config', async (req, res) => {
 // 添加搜索 API 端点
 app.post('/api/search', async (req, res) => {
   await handleSearchRequest(req, res)
+})
+
+// 视频代理路由
+app.get('/api/proxy', async (req, res) => {
+  try {
+    let videoUrl = req.query.url
+    const customReferer = req.query.referer // 获取自定义Referer
+    
+    if (!videoUrl) {
+      return res.status(400).json({ error: '缺少视频URL参数' })
+    }
+
+    // 如果 videoUrl结尾是 ?live=true 或 &live%3Dtrue 则去掉 ?live=true 或 &live%3Dtrue
+    videoUrl = videoUrl.replace(/(?:\?|&)(live=true|live%3Dtrue)$/, '');
+
+    
+    if (videoUrl.includes('_the_proxy_ts_url_')) {
+      const tpProxyUrl_split_arr = videoUrl.split('_the_proxy_ts_url_')
+      const tsProxyUrl_0 = tpProxyUrl_split_arr[0]
+      const tsProxyUrl_1 = tpProxyUrl_split_arr[1]
+
+      videoUrl = tsProxyUrl_0 + '?ts=' + tsProxyUrl_1
+    }
+    
+    // 解析视频URL
+    const targetUrl = new URL(videoUrl)
+    
+    // 根据请求判断是否来自移动设备
+    const isMobile = req.headers['user-agent'] ? /mobile|android|iphone|ipad/i.test(req.headers['user-agent']) : false;
+
+    // 选择合适的默认UA
+    const defaultUA = isMobile 
+      ? 'Mozilla/5.0 (Linux; Android 10; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.162 Mobile Safari/537.36'
+      : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+
+    // 创建请求配置
+    const options = {
+      hostname: targetUrl.hostname,
+      port: targetUrl.port || (targetUrl.protocol === 'https:' ? 443 : 80),
+      path: targetUrl.pathname + targetUrl.search,
+      method: 'GET',
+      headers: {
+        // 复制原始请求的headers
+        'User-Agent': req.headers['user-agent'] || defaultUA,
+        'Range': req.headers.range || '', // 支持视频拖拽
+        'Referer': customReferer || targetUrl.origin, // 使用自定义Referer或默认值
+        'Origin': targetUrl.origin,
+        'Host': targetUrl.host,
+        'Accept': '*/*',  // 接受所有类型的响应
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Accept-Encoding': 'identity',  // 避免压缩导致的问题
+        'Connection': 'keep-alive',
+        'Pragma': 'no-cache',
+        'Cache-Control': 'no-cache'
+      },
+      timeout: 0,
+      keepAlive: true,
+      keepAliveMsecs: 1000,
+    }
+    
+    // 复制可能有用的请求头
+    const headersToForward = [
+      'if-none-match', 'if-modified-since', 'cookie', 'authorization'
+    ];
+    
+    headersToForward.forEach(header => {
+      if (req.headers[header]) {
+        options.headers[header] = req.headers[header];
+      }
+    });
+    
+    // 始终优先使用自定义Referer
+    if (customReferer) {
+      options.headers['Referer'] = customReferer;
+      
+      // 从Referer中提取Origin
+      try {
+        const refererUrl = new URL(customReferer);
+        options.headers['Origin'] = `${refererUrl.protocol}//${refererUrl.host}`;
+      } catch (e) {
+        // 如果解析失败，使用默认Origin
+        console.warn('无法从Referer解析Origin:', e);
+      }
+    }
+    
+    // 选择http或https模块
+    const requestLib = targetUrl.protocol === 'https:' ? https : http
+    
+    // 发起代理请求
+    const proxyReq = requestLib.request(options, (proxyRes) => {
+      if (proxyRes.socket) {
+        proxyRes.socket.setNoDelay(true);
+      }
+      
+      // 复制响应头
+      Object.entries(proxyRes.headers).forEach(([key, value]) => {
+        if (value) {
+          res.setHeader(key, value);
+        }
+      });
+      
+      // 设置CORS头
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', '*');
+      
+      // 设置状态码
+      res.statusCode = proxyRes.statusCode || 200;
+      
+      // 收集所有响应数据，不再使用流式传输
+      let chunks = [];
+      
+      proxyRes.on('data', (chunk) => {
+        chunks.push(chunk);
+      });
+      
+      proxyRes.on('end', () => {
+        try {
+          // 合并所有数据块并直接发送
+          const buffer = Buffer.concat(chunks);
+          res.end(buffer);
+        } catch (error) {
+          console.error('处理响应数据时出错:', error);
+          if (!res.headersSent) {
+            res.status(500).json({ error: `处理响应失败: ${error.message}` });
+          }
+        }
+      });
+    })
+    
+    // 错误处理
+    proxyReq.on('error', (error) => {
+      console.error('代理请求错误:', error)
+      if (!res.headersSent) {
+        res.status(500).json({ error: `代理请求失败: ${error.message}` })
+      }
+    })
+    
+    // 超时处理
+    proxyReq.setTimeout(30000, () => {
+      proxyReq.destroy()
+      if (!res.headersSent) {
+        res.status(504).json({ error: '代理请求超时' })
+      }
+    })
+    
+    // 结束请求
+    proxyReq.end()
+    
+  } catch (error) {
+    console.error('代理处理错误:', error)
+    res.status(500).json({ error: `代理处理失败: ${error.message}` })
+  }
 })
 
 const port = process.env.API_PORT || 3001
