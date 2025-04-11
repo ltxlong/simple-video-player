@@ -8,7 +8,8 @@ const defaultConfig: Config = {
   enableLogin: false,
   loginPassword: '',
   announcement: '',
-  customTitle: ''
+  customTitle: '',
+  enableHealthFilter: true
 }
 
 /**

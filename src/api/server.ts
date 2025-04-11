@@ -1,7 +1,6 @@
 import type { Config, PublicConfig } from '../types/index.js'
 import { getConfig, updateConfig } from './config-handler.js'
 import bcrypt from 'bcryptjs'
-import { initDatabaseFromEnv } from '../db/index.js'
 
 /**
  * 生成JWT令牌
