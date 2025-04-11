@@ -12,4 +12,5 @@ export interface Config {
     loginPassword: string;
     announcement: string;
     customTitle: string;
+    enableHealthFilter: boolean;
 }

@@ -1,6 +1,11 @@
 declare module 'dplayer' {
   export interface DPlayerOptions {
     container: HTMLElement;
+    mutex: boolean;
+    screenshot: boolean;
+    airplay: boolean;
+    chromecast: boolean;
+    live: boolean;
     video: {
       url: string;
       type?: string;

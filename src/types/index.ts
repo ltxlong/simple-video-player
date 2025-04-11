@@ -15,6 +15,7 @@ export interface PublicConfig {
   enableLogin: boolean
   announcement: string
   customTitle?: string | 'false' | false
+  enableHealthFilter: boolean
 }
 
 export interface Config extends PublicConfig {
