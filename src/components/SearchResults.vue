@@ -10,6 +10,7 @@ import { BookmarkIcon } from '@heroicons/vue/24/outline'
 interface Props {
   sites: ResourceSite[]
   keyword: string
+  enableHealthFilter: boolean
 }
 
 const props = defineProps<Props>()
@@ -893,7 +894,7 @@ const performSearch = async () => {
   // 添加右上角搜索中提示
   const searchingMessage = document.createElement('div')
   searchingMessage.id = 'searching-message'
-  searchingMessage.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded shadow-lg z-50 flex items-center'
+  searchingMessage.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded shadow-lg z-[9999] flex items-center'
   searchingMessage.innerHTML = `
     <div class="mr-2 w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
     <span>正在搜索中...</span>
@@ -933,7 +934,7 @@ const performSearch = async () => {
           message.remove()
           // 显示搜索完成提示
           const completeMessage = document.createElement('div')
-          completeMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50'
+          completeMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-[9999]'
           completeMessage.textContent = '搜索完成'
           document.body.appendChild(completeMessage)
           setTimeout(() => completeMessage.remove(), 2000)
@@ -1007,13 +1008,6 @@ const searchSite = async (site: ResourceSite, index: number) => {
     // 解析内容
     const $ = load(html)
 
-    // 输出页面中所有可用的类名，以帮助调试
-    const allClasses = new Set<string>()
-    $('*[class]').each((_, el) => {
-      const classes = $(el).attr('class')?.split(/\s+/) || []
-      classes.forEach(c => allClasses.add(c))
-    })
-
     // 处理搜索结果
     await processResults($, searchUrl, site, index)
 
@@ -1047,12 +1041,12 @@ const processResults = async ($: CheerioAPI, searchUrl: string, site: ResourceSi
 
   if (site.searchResultClass) {
 
-    const $results = $(`.${site.searchResultClass}, [class*="${site.searchResultClass}"]`)
+    const $results = $(`.${site.searchResultClass}`)
 
     if ($results.length > 0) {
       const $container = $results.first()
 
-      const $items = $container.find('li').filter((_, li) => {
+      const $items = $container.children().filter((_, li) => {
         const $li = $(li)
         const isPagination = 
           $li.closest('.mac_pages, .page_tip, .page_info, .pages').length > 0 ||
@@ -1089,19 +1083,33 @@ const processResults = async ($: CheerioAPI, searchUrl: string, site: ResourceSi
               const type = $type.text().trim()
               const time = $time.text().trim()
 
-              resultHtml += `
-                <div class="result-item">
-                  <div class="block p-4 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer shadow-sm dark:shadow-gray-900/10"
-                       data-url="${absoluteUrl}"
-                  >
-                    <div class="flex flex-col gap-2">
-                      <div class="text-lg font-medium text-gray-900 dark:text-gray-100">${title}</div>
-                      ${type ? `<div class="text-sm text-gray-500 dark:text-gray-400">${type}</div>` : ''}
-                      ${time ? `<div class="text-sm text-gray-400 dark:text-gray-500">${time}</div>` : ''}
+              // 健康过滤
+              let healthFilterFlag = false;
+              if (props.enableHealthFilter) {
+                if (type) {
+                  healthFilterFlag = ['伦理片', '色情片', '福利视频', '福利片'].includes(type);
+                } else if (title) {
+                  healthFilterFlag = title.includes('伦理片') || title.includes('色情片') || title.includes('福利视频') || title.includes('福利片');
+                }
+              }
+
+              if (healthFilterFlag) {
+                linkCount--
+              } else {
+                resultHtml += `
+                  <div class="result-item">
+                    <div class="block p-4 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer shadow-sm dark:shadow-gray-900/10"
+                        data-url="${absoluteUrl}"
+                    >
+                      <div class="flex flex-col gap-2">
+                        <div class="text-lg font-medium text-gray-900 dark:text-gray-100">${title}</div>
+                        ${type ? `<div class="text-sm text-gray-500 dark:text-gray-400">${type}</div>` : ''}
+                        ${time ? `<div class="text-sm text-gray-400 dark:text-gray-500">${time}</div>` : ''}
+                      </div>
                     </div>
                   </div>
-                </div>
-              `
+                `
+              }
             } catch (e) {
               console.warn('URL转换失败:', e)
             }
@@ -1281,13 +1289,6 @@ const handleResultClick = async (url: string, customKeyword?: string) => {
     
     const $ = load(html)
     
-    // 输出页面中所有可用的类名，以帮助调试
-    const allClasses = new Set<string>()
-    $('*[class]').each((_, el) => {
-      const classes = $(el).attr('class')?.split(/\s+/) || []
-      classes.forEach(c => allClasses.add(c))
-    })
-    
     // 查找m3u8链接
     const playLinks = $('span, a').filter(function(this: any) {
       const $el = $(this)
@@ -1435,7 +1436,7 @@ const handleContainerClick = (event: MouseEvent) => {
   const clickedItem = target.closest('[data-url]')
 
   if (clickedItem) {
-    const url = clickedItem.getAttribute('data-url')
+    let url = clickedItem.getAttribute('data-url')
     if (url) {
       
       // 检查是否是m3u8链接
@@ -1534,13 +1535,27 @@ const handleContainerClick = (event: MouseEvent) => {
           textElement.classList.remove('text-gray-700', 'dark:text-gray-200')
           textElement.classList.add('text-primary-light', 'dark:text-primary-dark')
         }
+
+        // 如果当前URL是IPTV源，并且不是标签tab；或者人标签tab，并且是IPTV源
+        const videoType = detectVideoType(currentVideoInfo.value.detailPageUrl || '')
+        const isHtmlType = videoType === 'html'
+
+        if ((isIPTVSource.value[activeTab.value] && !showTagsTab.value) || (showTagsTab.value && !isHtmlType)) {
+          if (!url.includes('&live=true') && !url.includes('?live=true')) {
+            if (url.includes('?')) {
+              url += '&live=true'
+            } else {
+              url += '?live=true'
+            }
+          }
+        }
         
         // 确保事件被正确触发
         emit('updateVideoUrl', url)
         
         // 添加一个提示，表明链接已播放
         const message = document.createElement('div')
-        message.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg'
+        message.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-[9999]'
         message.textContent = '链接已播放'
         document.body.appendChild(message)
         setTimeout(() => message.remove(), 2000)
@@ -2187,7 +2202,7 @@ const handleContextMenu = (event: MouseEvent) => {
   if (clickedItem) {
     // 获取剧集信息
     const url = clickedItem.getAttribute('data-url') || ''
-    
+
     // 获取剧集标题文本
     const titleElement = clickedItem.querySelector('.text-center, .text-primary-light, .text-primary-dark, [class*="text-primary"], [class*="text-center"]')
     const title = titleElement?.textContent?.trim() || ''
@@ -2227,7 +2242,7 @@ const handleSaveAsTag = () => {
 
   // 获取剧集列表URL
   let detailPageUrl = ''
-  
+
   if (showTagsTab.value && currentVideoInfo.value.siteRemark) {
     // 如果是标签页模式，直接使用当前视频信息中保存的站点备注
     currentSite = currentVideoInfo.value.siteRemark;
@@ -2269,7 +2284,7 @@ const handleSaveAsTag = () => {
   detailPageUrl = tagInfo?.detailPageUrl || detailPageUrl
   
   // 对于IPTV源，确保剧集名称始终为"IPTV"
-  if (isIPTVSource.value[activeTab.value]) {
+  if (!showTagsTab.value && isIPTVSource.value[activeTab.value]) {
     seriesName = "IPTV"
   }
   
@@ -2317,7 +2332,7 @@ const handleSaveAsTag = () => {
   
   // 显示成功提示
   const message = document.createElement('div')
-  message.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50'
+  message.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-[9999]'
   message.textContent = '标签保存成功'
   document.body.appendChild(message)
   setTimeout(() => message.remove(), 2000)
@@ -2679,7 +2694,7 @@ const scrollToTop = () => {
     <!-- 添加独立的返回顶部按钮 -->
     <div 
       v-show="showBackToTop"
-      class="back-to-top-btn fixed bottom-6 right-6 w-9 h-9 rounded-full bg-primary-light dark:bg-primary-dark text-white shadow-lg flex items-center justify-center cursor-pointer hover:opacity-90 transition-all z-100 transform hover:scale-110"
+      class="back-to-top-btn fixed bottom-6 right-6 w-9 h-9 rounded-full bg-primary-light dark:bg-primary-dark text-white shadow-lg flex items-center justify-center cursor-pointer hover:opacity-90 transition-all z-[9999] transform hover:scale-110"
       @click="scrollToTop"
     >
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -2690,7 +2705,7 @@ const scrollToTop = () => {
     <!-- 右键菜单 -->
     <div 
       v-if="contextMenu.visible" 
-      class="context-menu fixed z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 shadow-lg rounded-lg"
+      class="context-menu fixed z-[9999] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 shadow-lg rounded-lg"
       :style="{
         left: `${contextMenu.x}px`,
         top: `${contextMenu.y}px`,

@@ -2,6 +2,7 @@
 import { ref, onBeforeUnmount, watch} from 'vue'
 import DPlayer from 'dplayer'
 import Hls from 'hls.js'
+import flvjs from 'flv.js'
 
 interface Props {
   url: string
@@ -14,9 +15,11 @@ const playerContainer = ref<HTMLElement | null>(null)
 const iframeContainer = ref<HTMLIFrameElement | null>(null) 
 let player: DPlayer | null = null
 let hls: Hls | null = null
+let flvPlayer: flvjs.Player | null = null  // 添加 FLV 播放器实例变量
 let retryCount = 0
 const MAX_RETRY_COUNT = 1
 const isHtmlVideo = ref(false)
+const useProxyUrl = ref(false)
 
 // 添加状态监控
 let lastPlayingTime = 0
@@ -43,8 +46,19 @@ const checkAndRetry = () => {
     return false
   }
   
+  if (useProxyUrl.value) {
+    return false
+  }
+
   if (retryCount >= MAX_RETRY_COUNT) {
     console.error('已达到最大重试次数，停止重试')
+    // 开启代理模式
+    useProxyUrl.value = true
+    if (!props.url.includes('/api/proxy?url=')) {
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(props.url)}`
+      initPlayer(proxyUrl)
+    }
+
     return false
   }
   retryCount++
@@ -336,6 +350,11 @@ const detectVideoType = (url: string): string => {
         isHtmlVideo.value = true
         return 'html'
       }
+      // 添加 RTMP 判断
+      const rtmpPrefixes = ['rtmp://', 'rtmps://', 'rtmpt://', 'rtmpe://', 'rtmpte://']
+      if (rtmpPrefixes.some(prefix => url.toLowerCase().startsWith(prefix))) {
+        return 'flv'  // RTMP 流也返回 'flv'
+      }
 
       return 'auto'
   }
@@ -375,6 +394,36 @@ const refreshVideoIframe = () => {
   }
 }
 
+// 检测是否为直播流
+const isLiveStream = (url: string): boolean => {
+  // 处理 URL 中的空格
+  const trimmedUrl = url.trim()
+  
+  // 直接检查是否是 RTMP 或 RTSP 协议
+  const streamPrefixes = ['rtmp://', 'rtmps://', 'rtmpt://', 'rtmpe://', 'rtmpte://', 'rtsp://']
+  if (streamPrefixes.some(prefix => trimmedUrl.toLowerCase().startsWith(prefix))) {
+    return true
+  }
+  
+  // 检查路径中是否包含直播相关的关键词
+  const livePathPatterns = ['/live', '/stream', '/hls/']
+  if (livePathPatterns.some(pattern => trimmedUrl.includes(pattern))) {
+    return true
+  }
+  
+  return false
+}
+
+const isLocalhost = () => {
+  const hostname = window.location.hostname
+  return hostname === 'localhost' 
+    || hostname === '127.0.0.1'
+    || hostname.startsWith('192.168.')  // 本地网络
+    || hostname.startsWith('10.')       // 本地网络
+    || hostname.endsWith('.local')      // mDNS local domain
+    || hostname === ''                 // 空主机名也视为本地
+}
+
 // 初始化播放器
 const initPlayer = (url: string) => {
   if (!playerContainer.value) {
@@ -397,17 +446,28 @@ const initPlayer = (url: string) => {
       hls = null
     }
 
+    // 清理 FLV 实例
+    if (flvPlayer) {
+      console.log('销毁旧的 FLV 实例')
+      flvPlayer.destroy()
+      flvPlayer = null
+    }
+
     // 清空容器
     console.log('清空播放器容器')
     playerContainer.value.innerHTML = ''
 
     // 检测视频类型
     const videoType = detectVideoType(url)
-    console.log('检测到的视频类型:', videoType)
 
     // 创建新的播放器实例
     player = new DPlayer({
       container: playerContainer.value,
+      mutex: true,
+      screenshot: true,
+      airplay: true,
+      chromecast: true,
+      live: url.endsWith('live=true') || url.endsWith('live%3Dtrue'),
       video: {
         url: url,
         type: videoType,
@@ -415,29 +475,50 @@ const initPlayer = (url: string) => {
           m3u8: (video: HTMLVideoElement, player: DPlayer) => {
 
             if (Hls.isSupported()) {
+
               hls = new Hls({
                 // HLS 配置
-                maxBufferSize: 0,
-                maxBufferLength: 30,
-                maxMaxBufferLength: 60,
                 startLevel: -1,
+                testBandwidth: true,
+                maxBufferSize: 0,
+                maxBufferLength: 150,
                 manifestLoadingTimeOut: 10000,
                 manifestLoadingMaxRetry: 3,
                 levelLoadingTimeOut: 10000,
                 levelLoadingMaxRetry: 3,
-                fragLoadingTimeOut: 10000,
-                fragLoadingMaxRetry: 3,
+                fragLoadingTimeOut: 30000,
+                fragLoadingMaxRetry: 5,
+                fragLoadingRetryDelay: 1000,
                 enableWorker: true,
-                lowLatencyMode: true,
-                backBufferLength: 30,
-                testBandwidth: true,
+                lowLatencyMode: !url.endsWith('live=true') || !url.endsWith('live%3Dtrue'),
+                backBufferLength: 90,
                 //progressive: true, // 这个参数可能会让广告过滤失败，故注释掉
+                appendErrorMaxRetry: 5,
+                liveSyncDurationCount: 5,
                 stretchShortVideoTrack: true,
-                forceKeyFrameOnDiscontinuity: true,
-                
+                abrMaxWithRealBitrate: true,
+
                 // 添加自定义加载器
                 loader: customLoaderFactory(),
               })
+
+              if (url.endsWith('live=true') || url.endsWith('live%3Dtrue')) {
+                hls.config.startPosition = -1
+
+                hls.on(Hls.Events.FRAG_BUFFERED, () => {
+                  const buffered = player.video.buffered;
+                  if (buffered.length > 0) {
+                    const bufferedEnd = buffered.end(buffered.length - 1);
+                    const currentTime = player.video.currentTime;
+                    const timeToNextFrag = bufferedEnd - currentTime;
+
+                    if (timeToNextFrag < 10) {
+                      hls.startLoad(bufferedEnd)
+                    }
+                  }
+                  
+                })
+              }
 
               // 绑定 HLS 事件
               hls.on(Hls.Events.ERROR, (event, data) => {
@@ -452,7 +533,9 @@ const initPlayer = (url: string) => {
                     case Hls.ErrorTypes.NETWORK_ERROR:
                       console.log('尝试恢复网络错误...')
                       if (hls.media) {
-                        hls.startLoad()
+                        if (checkAndRetry()) {
+                          hls.startLoad()
+                        }
                       }
                       break
                     case Hls.ErrorTypes.MEDIA_ERROR:
@@ -478,17 +561,147 @@ const initPlayer = (url: string) => {
                 }
               })
 
-              hls.loadSource(url)
+              if (isLocalhost() || url.endsWith('live=true') || url.endsWith('live%3Dtrue')) {
+                
+                const actualUrl = url.startsWith('http://') && !url.includes('/api/proxy?url=') ? `/api/proxy?url=${encodeURIComponent(url)}` : url
+                if (actualUrl.includes('/api/proxy?url=')) {
+                  useProxyUrl.value = true
+                }
+
+                hls.loadSource(actualUrl)
+              } else {
+                hls.loadSource(url)
+              }
+
               hls.attachMedia(video)
 
             } else {
               console.error('不支持 HLS 播放')
               player.notice('当前浏览器不支持 HLS 播放', 3000, 0.5)
             }
+          },
+          flv: (video: HTMLVideoElement, player: DPlayer) => {
+            if (flvjs.isSupported()) {
+              // 处理 URL 中的空格
+              const trimmedUrl = url.trim()
+              const isLive = isLiveStream(trimmedUrl)
+              
+              flvPlayer = flvjs.createPlayer({
+                type: 'flv',
+                url: trimmedUrl,
+                isLive: isLive,
+                cors: true,
+                // 直播流优化配置
+                ...((isLive) ? {
+                  enableStashBuffer: true,  // 启用缓存
+                  stashInitialSize: 512,    // 较大的初始缓存
+                  enableWorker: true,        // 启用 Web Worker
+                  autoCleanupSourceBuffer: true, // 自动清理源缓冲区
+                  autoCleanupMaxBackwardDuration: 30, // 最大向后清理时长
+                  autoCleanupMinBackwardDuration: 10,  // 最小向后清理时长
+
+                } : {
+                  // 点播流优化配置
+                  enableStashBuffer: true,    // 启用缓存
+                  stashInitialSize: 512,      // 较大的初始缓存
+                  enableWorker: true,         // 启用 Web Worker
+                  autoCleanupSourceBuffer: false, // 不自动清理源缓冲区
+                  accurateSeek: true,         // 启用精确搜索
+                  seekType: 'range',          // 使用范围搜索
+                  lazyLoad: true,             // 启用延迟加载
+                  reuseRedirectedURL: true    // 重用重定向 URL
+                })
+              })
+              
+              flvPlayer.attachMediaElement(video)
+              
+              // 等待视频元素准备好
+              const waitForVideoReady = () => {
+                return new Promise<void>((resolve) => {
+                  if (video.readyState >= 2) { // HAVE_CURRENT_DATA = 2
+                    resolve()
+                  } else {
+                    const onCanPlay = () => {
+                      video.removeEventListener('canplay', onCanPlay)
+                      resolve()
+                    }
+                    video.addEventListener('canplay', onCanPlay)
+                  }
+                })
+              }
+              
+              // 加载并等待视频准备好
+              flvPlayer.load()
+              
+              // 使用 Promise 链式处理播放
+              waitForVideoReady()
+                .then(() => {
+                  console.log('视频已准备好')
+                })
+                .catch(error => {
+                  console.warn('视频加载失败:', error)
+                  if (player) {
+                    player.notice('视频加载失败，请检查网络或视频地址', 3000, 0.5)
+                  }
+                })
+              
+              // 监听错误事件
+              flvPlayer.on(flvjs.Events.ERROR, (errorType, errorDetail) => {
+                console.error('播放错误:', errorType, errorDetail)
+                
+                // 检查是否应该重试
+                if (checkAndRetry()) {
+                  // @ts-ignore
+                  player?.switchVideo({
+                    url: url,
+                    type: videoType
+                  })
+                } else {
+                  // 达到最大重试次数，停止播放
+                  console.log('达到最大重试次数，停止播放')
+                  if (player) {
+                    player.pause()
+                    player.notice('视频加载失败，请检查网络或视频地址', 5000, 0.5)
+                  }
+                }
+              })
+
+              // 如果是直播流添加额外的监控
+              if (isLive) {
+                // 监控播放状态
+                let lastTime = 0
+                let stuckCount = 0
+                const checkInterval = setInterval(() => {
+                  if (video.currentTime === lastTime) {
+                    stuckCount++
+                    if (stuckCount > 3) {
+                      console.warn('流可能卡住，尝试恢复...')
+                      if (flvPlayer) {
+                        flvPlayer.unload()
+                        flvPlayer.load()
+                        flvPlayer.play()
+                      }
+                      stuckCount = 0
+                    }
+                  } else {
+                    stuckCount = 0
+                  }
+                  lastTime = video.currentTime
+                }, 5000)
+
+                // 组件卸载时清理定时器
+                onBeforeUnmount(() => {
+                  clearInterval(checkInterval)
+                })
+              }
+            } else {
+              console.error('不支持 FLV 播放')
+              player.notice('当前浏览器不支持 FLV 播放', 3000, 0.5)
+            }
           }
         }
       },
-      autoplay: false,
+      autoplay: true,
       theme: '#3B82F6',
       lang: 'zh-cn',
       hotkey: true,
@@ -509,6 +722,8 @@ const initPlayer = (url: string) => {
 
 // 重置播放器
 const resetPlayer = async () => {
+  useProxyUrl.value = false
+
   // 1. 暂停播放和停止加载
   if (player?.video) {
     try {
@@ -531,8 +746,20 @@ const resetPlayer = async () => {
       console.warn('销毁 HLS 实例失败:', error)
     }
   }
+
+  // 3. 停止并销毁 FLV 实例
+  if (flvPlayer) {
+    try {
+      flvPlayer.unload()
+      flvPlayer.detachMediaElement()
+      flvPlayer.destroy()
+      flvPlayer = null
+    } catch (error) {
+      console.warn('销毁 FLV 实例失败:', error)
+    }
+  }
   
-  // 3. 清理所有定时器
+  // 4. 清理所有定时器
   if (stuckCheckTimer) {
     clearInterval(stuckCheckTimer)
     stuckCheckTimer = null
@@ -542,7 +769,7 @@ const resetPlayer = async () => {
     waitingTimer = null
   }
   
-  // 4. 销毁播放器实例
+  // 5. 销毁播放器实例
   if (player) {
     try {
       player.destroy()
@@ -552,18 +779,18 @@ const resetPlayer = async () => {
     }
   }
   
-  // 5. 重置所有状态
+  // 6. 重置所有状态
   retryCount = 0
   userSelectedTime = 0
   lastPlayingTime = 0
   lastCheckTime = Date.now()
   
-  // 6. 清理 DOM
+  // 7. 清理 DOM
   if (playerContainer.value) {
     playerContainer.value.innerHTML = ''
   }
   
-  // 7. 等待一小段时间确保清理完成
+  // 8. 等待一小段时间确保清理完成
   await new Promise(resolve => setTimeout(resolve, 100))
 }
 
@@ -584,19 +811,21 @@ watch(() => props.url, async (newUrl, oldUrl) => {
   const trimmedNewUrl = newUrl?.trim() || ''
   const trimmedOldUrl = oldUrl?.trim() || ''
 
-  const initVideoFlag = initVideo()
-
-  if (initVideoFlag) {
-    return
-  }
-
-  if (!trimmedNewUrl) {
-    await resetPlayer()
-    return
-  }
-
   // 只在 URL 真正改变时才执行重置和初始化
   if (trimmedNewUrl !== trimmedOldUrl) {
+
+    useProxyUrl.value = false
+
+    const initVideoFlag = initVideo()
+
+    if (initVideoFlag) {
+      return
+    }
+
+    if (!trimmedNewUrl) {
+      await resetPlayer()
+      return
+    }
     
     // 设置标志，禁用重试逻辑
     isUrlChanging = true
@@ -706,7 +935,7 @@ function customLoaderFactory() {
       this.load = function(context: any, config: any, callbacks: any) {
 
         if (context.type === 'manifest' || context.type === 'level') {
-          
+
           // 覆盖原始回调
           const originalSuccessCallback = callbacks.onSuccess;
           callbacks.onSuccess = function(response: any, stats: any, context: any) {
@@ -718,7 +947,7 @@ function customLoaderFactory() {
               let filteredLines = [];
 
               for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
+                let line = lines[i];
                 
                 if (line.startsWith('#EXT-X-DISCONTINUITY')) {
                   if (i > 0 && lines[i - 1].startsWith('#EXT-X-PLAYLIST-TYPE')) {
@@ -728,6 +957,57 @@ function customLoaderFactory() {
                     } else {
                         continue;
                     }
+                }
+
+                if (useProxyUrl.value && (line.includes('.ts') || line.includes('.m3u8'))) {
+
+                  if (context.url.includes('/api/proxy?url=')) {
+                    try {
+                      // 解析原始URL
+                      const proxyUrl = context.url.split('/api/proxy?url=')[1]
+                      const originalUrl = decodeURIComponent(proxyUrl)
+                      const urlObj = new URL(originalUrl)
+                      
+                      // 正确处理基础URL和相对路径
+                      let tsUrl = '';
+                      if (line.startsWith('http')) {
+                        // 如果是绝对路径
+                        tsUrl = line
+                      } else {
+                        // 如果是相对路径
+                        if (line.startsWith('/')) {
+                          // 如果以斜杠开头，使用域名作为基础
+                          tsUrl = `${urlObj.protocol}//${urlObj.host}${line}`
+                        } else {
+                          // 如果不以斜杠开头，需要考虑完整路径
+                          // 获取原始URL的目录部分
+                          const pathParts = urlObj.pathname.split('/');
+                          pathParts.pop(); // 移除文件名
+                          const basePath = pathParts.join('/');
+                          tsUrl = `${urlObj.protocol}//${urlObj.host}${basePath}/${line}`
+                        }
+                      }
+
+                      // 确保URL格式正确（防止双重编码）
+                      let proxyTsUrl = encodeURIComponent(tsUrl)
+                      let finalUrl = `/api/proxy?url=${proxyTsUrl}&referer=${encodeURIComponent(originalUrl)}`
+                      
+                      // 特殊情况处理
+                      if (line.includes('.m3u8?ts=')) {
+                        const tpProxyUrl_split_arr = tsUrl.split('?ts=')
+                        const tsProxyUrl_0 = tpProxyUrl_split_arr[0]
+                        const tsProxyUrl_1 = tpProxyUrl_split_arr[1]
+                        proxyTsUrl = encodeURIComponent(tsProxyUrl_0 + '_the_proxy_ts_url_' + tsProxyUrl_1)
+                        finalUrl = `/api/proxy?url=${proxyTsUrl}`
+                      }
+                      
+                      filteredLines.push(finalUrl)
+                    } catch (error) {
+                      console.error('构建代理URL时出错:', error)
+                      filteredLines.push(line) // 出错时使用原始行
+                    }
+                    continue;
+                  }
                 }
                 
                 filteredLines.push(line);
@@ -739,6 +1019,98 @@ function customLoaderFactory() {
             
             // 调用原始成功回调
             originalSuccessCallback(response, stats, context);
+          };
+        } else if (context.type === 'fragment' && useProxyUrl.value) {
+          // 对于片段请求，确保添加必要的头信息
+          const loadatetimeout = context.loadatetimeout || 0;
+          
+          // 添加请求超时
+          context.loadatetimeout = loadatetimeout > 0 ? loadatetimeout : 30000;
+          
+          // 修改XHR对象以添加自定义头
+          const originalXhrSetup = config.xhrSetup;
+          config.xhrSetup = function(xhr: XMLHttpRequest, url: string) {
+            if (originalXhrSetup) {
+              originalXhrSetup(xhr, url);
+            }
+            
+            // 添加必要的请求头
+            xhr.withCredentials = true; // 允许跨域请求携带认证信息
+            
+            // 对媒体片段进行特殊处理 - 直接通过URL判断是否为.ts文件
+            if (url.includes('.ts')) {
+              // 所有.ts文件请求都设置为arraybuffer
+              xhr.responseType = 'arraybuffer';
+            }
+            
+            // 修改URL，确保传递正确的referer参数
+            if (url.includes('/api/proxy?url=') && !url.includes('&referer=')) {
+              try {
+                // 从m3u8 URL中提取referer信息
+                const m3u8Url = context.url || '';
+                const refererMatch = m3u8Url.match(/&referer=([^&]+)/);
+                
+                if (refererMatch && refererMatch[1]) {
+                  const referer = decodeURIComponent(refererMatch[1]);
+                  // 修改URL以包含referer参数
+                  const currentMethod = xhr.readyState > 0 ? 'GET' : 'GET'; // XMLHttpRequest没有method属性
+                  xhr.open(currentMethod, `${url}&referer=${encodeURIComponent(referer)}`, true);
+                }
+              } catch (error) {
+                console.warn('为TS片段添加Referer时出错:', error);
+              }
+            }
+          };
+          
+          // 处理HTTP错误
+          const originalOnError = callbacks.onError;
+          callbacks.onError = function(
+            response: any, 
+            context: any, 
+            errorType: string, 
+            requestURL: string
+          ) {
+            const status = response?.status || 0;
+            console.error(`片段加载错误: ${status} ${errorType}`, {
+              url: requestURL,
+              status,
+              errorType
+            });
+            
+            // 处理特定错误
+            if (status === 403) {
+              console.warn('收到403 Forbidden，尝试调整请求');
+              
+              // 如果已经在使用代理，尝试找到替代解决方案
+              if (requestURL.includes('/api/proxy?url=')) {
+                console.warn('代理请求也返回403，可能需要特定的访问凭证');
+                
+                // 尝试检查URL是否包含referer参数
+                if (!requestURL.includes('&referer=')) {
+                  try {
+                    // 从上下文中推断referer
+                    const m3u8Url = context.url || '';
+                    const urlObj = new URL(m3u8Url.split('/api/proxy?url=')[1]);
+                    const referer = encodeURIComponent(urlObj.origin);
+                    
+                    // 创建新的请求URL
+                    const newURL = `${requestURL}&referer=${referer}`;
+                    
+                    // 重新加载使用新URL
+                    context.url = newURL;
+                    load(context, config, callbacks);
+                    return;
+                  } catch (error) {
+                    console.error('尝试修复URL时出错:', error);
+                  }
+                }
+              }
+            }
+            
+            // 调用原始错误回调
+            if (originalOnError) {
+              originalOnError(response, context, errorType, requestURL);
+            }
           };
         }
         
