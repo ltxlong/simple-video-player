@@ -2,6 +2,36 @@ import http from 'http'
 import https from 'https'
 
 /**
+ * 判断一个字符串是否为IPv4地址
+ * @param {string} str - 要检查的字符串
+ * @returns {boolean} - 是否为IPv4地址
+ */
+function isIPv4(str) {
+  // IPv4地址的正则表达式
+  const ipv4Pattern = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+  if (!ipv4Pattern.test(str)) {
+    return false;
+  }
+  
+  // 检查每个数字是否在有效范围内
+  const parts = str.split('.');
+  return parts.every(part => {
+    const num = parseInt(part, 10);
+    return num >= 0 && num <= 255;
+  });
+}
+
+/**
+ * 判断一个字符串是否为IPv6地址
+ * @param {string} str - 要检查的字符串
+ * @returns {boolean} - 是否为IPv6地址
+ */
+function isIPv6(str) {
+  // 简单检查，IPv6地址含有冒号但不含有点
+  return str.includes(':') && !str.includes('.');
+}
+
+/**
  * 处理代理请求的核心逻辑
  * @param {Object} req - 请求对象 (可以是Express或适配的请求)
  * @param {Object} res - 响应对象 (可以是Express或适配的响应)
@@ -75,6 +105,15 @@ export async function handleProxyRequest(req, res, isServerless = false) {
       keepAliveMsecs: 1000,
     }
     
+    // 判断目标主机是IPv4还是IPv6，设置对应的family参数
+    if (isIPv4(targetUrl.hostname)) {
+      options.family = 4;
+    } else if (isIPv6(targetUrl.hostname)) {
+      options.family = 6;
+    } else {
+      // 对于域名，不设置family，让系统自动选择
+    }
+    
     // 复制可能有用的请求头
     const headersToForward = [
       'if-none-match', 'if-modified-since', 'cookie', 'authorization'
@@ -130,6 +169,13 @@ export async function handleProxyRequest(req, res, isServerless = false) {
           // 设置CORS头
           res.setHeader('Access-Control-Allow-Origin', '*')
           res.setHeader('Access-Control-Allow-Headers', '*')
+
+          // 删除Content-Length头，避免与Transfer-Encoding冲突
+          if (res.hasHeader('Content-Length')) {
+            res.removeHeader('Content-Length')
+          }
+          res.setHeader('Transfer-Encoding', 'chunked')
+          res.setHeader('X-Content-Type-Options', 'nosniff')
           
           // 设置状态码
           res.statusCode = proxyRes.statusCode || 200
@@ -164,65 +210,105 @@ export async function handleProxyRequest(req, res, isServerless = false) {
       proxyReq.on('error', (error) => {
         console.error('代理请求错误:', error)
         
+        // 立即销毁连接，避免等待超时
+        proxyReq.destroy();
+        
         // 特别处理ECONNRESET错误
         if (error.code === 'ECONNRESET') {
           console.warn('连接被重置，尝试重新发送请求')
           
-          // 延迟500ms后重试一次请求
-          setTimeout(() => {
-            const retryReq = requestLib.request(options, (retryRes) => {
-              try {
-                // 与原始代码相同的响应处理逻辑
-                if (retryRes.socket) {
-                  retryRes.socket.setNoDelay(true);
-                  retryRes.socket.setKeepAlive(true, 60000); // 设置更长的保活时间
-                }
-                
-                Object.entries(retryRes.headers).forEach(([key, value]) => {
-                  if (value) {
-                    res.setHeader(key, value)
+          // 使用计数器和递归函数实现多次重试
+          let retryCount = 0;
+          const maxRetries = 1;
+          
+          const retryRequest = () => {
+            retryCount++;
+            console.log(`开始第${retryCount}次重试...`);
+            
+            // 延迟500ms后重试请求
+            setTimeout(() => {
+              const retryReq = requestLib.request(options, (retryRes) => {
+                try {
+                  // 与原始代码相同的响应处理逻辑
+                  if (retryRes.socket) {
+                    retryRes.socket.setNoDelay(true);
+                    retryRes.socket.setKeepAlive(true, 60000); // 设置更长的保活时间
                   }
-                })
-                
-                res.setHeader('Access-Control-Allow-Origin', '*')
-                res.setHeader('Access-Control-Allow-Headers', '*')
-                res.statusCode = retryRes.statusCode || 200
-                
-                // 对于流媒体，使用管道直接传输更高效
-                retryRes.pipe(res)
-                
-                retryRes.on('end', () => {
-                  // 流结束后才resolve promise
-                  resolve()
-                })
-                
-                retryRes.on('error', (streamError) => {
-                  console.error('重试流传输错误:', streamError)
-                  // 如果头已经发送，就不能再发送错误响应
+                  
+                  Object.entries(retryRes.headers).forEach(([key, value]) => {
+                    if (value) {
+                      res.setHeader(key, value)
+                    }
+                  })
+                  
+                  res.setHeader('Access-Control-Allow-Origin', '*')
+                  res.setHeader('Access-Control-Allow-Headers', '*')
+                  
+                  // 删除Content-Length头，避免与Transfer-Encoding冲突
+                  if (res.hasHeader('Content-Length')) {
+                    res.removeHeader('Content-Length')
+                  }
+                  res.setHeader('Transfer-Encoding', 'chunked')
+                  res.setHeader('X-Content-Type-Options', 'nosniff')
+                  res.statusCode = retryRes.statusCode || 200
+                  
+                  // 对于流媒体，使用管道直接传输更高效
+                  retryRes.pipe(res)
+                  
+                  retryRes.on('end', () => {
+                    // 流结束后才resolve promise
+                    resolve()
+                  })
+                  
+                  retryRes.on('error', (streamError) => {
+                    console.error('重试流传输错误:', streamError)
+                    // 如果头已经发送，就不能再发送错误响应
+                    if (!res.headersSent) {
+                      res.status(500).json({ error: `重试流传输错误: ${streamError.message}` })
+                    }
+                    reject(streamError)
+                  })
+                } catch (error) {
+                  console.error('处理重试响应时出错:', error)
                   if (!res.headersSent) {
-                    res.status(500).json({ error: `重试流传输错误: ${streamError.message}` })
+                    res.status(500).json({ error: `处理重试响应失败: ${error.message}` })
                   }
-                  reject(streamError)
-                })
-              } catch (error) {
-                console.error('处理重试响应时出错:', error)
-                if (!res.headersSent) {
-                  res.status(500).json({ error: `处理重试响应失败: ${error.message}` })
+                  reject(error)
                 }
-                reject(error)
-              }
-            })
-            
-            retryReq.on('error', (retryError) => {
-              console.error('重试代理请求失败:', retryError)
-              if (!res.headersSent) {
-                res.status(500).json({ error: `重试代理请求失败: ${retryError.message}` })
-              }
-              reject(retryError)
-            })
-            
-            retryReq.end()
-          }, 500)
+              })
+              
+              retryReq.on('error', (retryError) => {
+                console.error(`第${retryCount}次重试失败:`, retryError)
+                
+                // 立即销毁连接，避免等待超时
+                retryReq.destroy();
+                
+                // 如果还有重试次数，继续重试
+                if (retryCount < maxRetries && retryError.code === 'ECONNRESET') {
+                  retryRequest();
+                } else {
+                  if (!res.headersSent) {
+                    res.status(500).json({ error: `重试代理请求失败: ${retryError.message}` })
+                  }
+                  reject(retryError)
+                }
+              })
+              
+              // 设置超时，与主请求保持一致
+              retryReq.setTimeout(30000, () => {
+                retryReq.destroy()
+                if (!res.headersSent) {
+                  res.status(504).json({ error: '重试请求超时' })
+                }
+                reject(new Error('重试请求超时'))
+              })
+              
+              retryReq.end()
+            }, 500)
+          };
+          
+          // 开始第一次重试
+          retryRequest();
           
           return
         }
@@ -281,7 +367,7 @@ async function fetchWithProxy(targetUrl, options, customReferer) {
   }
   
   let retries = 0;
-  const maxRetries = 3;
+  const maxRetries = 1;
   
   while (retries <= maxRetries) {
     try {
@@ -290,18 +376,32 @@ async function fetchWithProxy(targetUrl, options, customReferer) {
         method: 'GET',
         headers,
         redirect: 'follow',
-        // 对于流媒体，不设置timeout更合适，避免长视频被中断
-        // 在流处理结束前不会终止连接
-      })
+      });
+      
+      // 创建一个TransformStream来处理分块
+      const transformStream = new TransformStream({
+        transform(chunk, controller) {
+          // 立即传递数据块，减少等待时间
+          controller.enqueue(chunk);
+        }
+      });
+      
+      // 将输入流通过转换流传递到输出
+      const responseBody = response.body.pipeThrough(transformStream);
       
       // 创建响应头
       const responseHeaders = new Headers(response.headers)
       responseHeaders.set('Access-Control-Allow-Origin', '*')
       responseHeaders.set('Access-Control-Allow-Headers', '*')
       
-      // 对于流媒体，直接传递原始响应流更高效
-      // 而不是等待整个响应加载完毕
-      return new Response(response.body, {
+      // 删除Content-Length头，避免与Transfer-Encoding冲突
+      if (responseHeaders.has('Content-Length')) {
+        responseHeaders.delete('Content-Length')
+      }
+      responseHeaders.set('Transfer-Encoding', 'chunked')
+      responseHeaders.set('X-Content-Type-Options', 'nosniff')
+      
+      return new Response(responseBody, {
         status: response.status,
         headers: responseHeaders
       })
@@ -313,8 +413,6 @@ async function fetchWithProxy(targetUrl, options, customReferer) {
         console.error('Serverless代理请求失败，已重试最大次数:', error);
         throw error;
       }
-      
-      console.warn(`Serverless代理请求失败，正在进行第${retries}次重试:`, error);
       
       // 短暂延迟后重试
       await new Promise(resolve => setTimeout(resolve, 500));
