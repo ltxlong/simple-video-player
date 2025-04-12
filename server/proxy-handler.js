@@ -1,5 +1,5 @@
-import http from 'http'
-import https from 'https'
+import net from 'net'
+import tls from 'tls'
 
 /**
  * 判断一个字符串是否为IPv4地址
@@ -7,18 +7,9 @@ import https from 'https'
  * @returns {boolean} - 是否为IPv4地址
  */
 function isIPv4(str) {
-  // IPv4地址的正则表达式
-  const ipv4Pattern = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
-  if (!ipv4Pattern.test(str)) {
-    return false;
-  }
-  
-  // 检查每个数字是否在有效范围内
-  const parts = str.split('.');
-  return parts.every(part => {
-    const num = parseInt(part, 10);
-    return num >= 0 && num <= 255;
-  });
+  // IPv4正则表达式
+  const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+  return ipv4Regex.test(str);
 }
 
 /**
@@ -27,388 +18,339 @@ function isIPv4(str) {
  * @returns {boolean} - 是否为IPv6地址
  */
 function isIPv6(str) {
-  // 简单检查，IPv6地址含有冒号但不含有点
-  return str.includes(':') && !str.includes('.');
+  let new_str = str.replace(/\[|\]/g, "");
+  const ipv6Regex =
+    /^\s*((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,4}){1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:)))(%.+)?\s*$/;
+  return ipv6Regex.test(new_str);
+}
+
+/**
+ * 判断一个字符串是否为IP地址(IPv4或IPv6)
+ * @param {string} str - 要检查的字符串
+ * @returns {boolean} - 是否为IP地址
+ */
+function isIP(str) {
+  // 判断是IPv4还是IPv6
+  if (str.includes("[") && str.includes("]")) {
+    return isIPv6(str);
+  } else {
+    return isIPv4(str);
+  }
+}
+
+/**
+ * 查找HTTP头部结束位置（双CRLF）
+ * @param {Uint8Array} data - 要检查的数据
+ * @returns {number} - 双CRLF的索引位置，如果未找到则返回-1
+ */
+function indexOfDoubleCRLF(data) {
+  if (data.length < 4) {
+    return -1;
+  }
+  for (let i = 0; i < data.length - 3; i++) {
+    if (
+      data[i] === 13 &&
+      data[i + 1] === 10 &&
+      data[i + 2] === 13 &&
+      data[i + 3] === 10
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * 代理化URL，用于处理重定向和HLS流
+ * @param {string} url - 要处理的URL
+ * @returns {string} - 处理后的URL
+ */
+function proxify(url) {
+  // 如果是完整URL
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    // 返回代理URL格式
+    return `/api/proxy?url=${url}`;
+  }
+  
+  // 相对URL暂时返回原样
+  return url;
+}
+
+/**
+ * 使用TCP连接从远程服务器获取响应
+ * @param {Request} request - 请求对象
+ * @returns {Promise<Response>} - 响应对象
+ */
+async function fetchOverTcp(request) {
+  const url = new URL(request.url);
+  const req = new Request(url, request);
+  let port = parseInt(url.port);
+  
+  if (!port) {
+    port = url.protocol === "https:" ? 443 : 80;
+  }
+
+  // 对于标准端口和非IP地址，可以使用普通fetch
+  if (
+    ((url.protocol === "https:" && port === 443) ||
+     (url.protocol === "http:" && port === 80)) &&
+    !isIP(url.hostname)
+  ) {
+    console.log('使用原生fetch');
+    return await fetch(req);
+  }
+
+  return new Promise((resolve, reject) => {
+    try {
+      // 创建 TCP 连接
+      let socket = null;
+      
+      if (url.protocol === "https:") {
+        socket = tls.connect({
+          host: url.hostname,
+          port: port,
+          rejectUnauthorized: false
+        });
+      } else {
+        socket = net.connect({
+          host: url.hostname,
+          port: port
+        });
+      }
+
+      socket.on('error', (err) => {
+        console.error('TCP连接错误:', err);
+        socket.destroy();
+        reject(new Response(`TCP连接错误: ${err.message}`, { status: 500 }));
+      });
+
+      socket.on('connect', () => {
+        // 构造请求头部
+        let headersString = "";
+        
+        for (const [name, value] of req.headers) {
+          if (
+            name === "connection" ||
+            name === "host" ||
+            name === "accept-encoding"
+          ) {
+            continue;
+          }
+          headersString += `${name}: ${value}\r\n`;
+        }
+        
+        headersString += `connection: close\r\n`;
+        headersString += `accept-encoding: identity\r\n`;
+
+        let fullpath = url.pathname;
+
+        // 如果有查询参数，添加到路径
+        if (url.search) {
+          fullpath += url.search.replace(/%3F/g, "?");
+        }
+
+        // 发送HTTP请求
+        const requestString = `${req.method} ${fullpath} HTTP/1.0\r\nHost: ${url.hostname}:${port}\r\n${headersString}\r\n`;
+        socket.write(requestString);
+      });
+
+      // 处理响应
+      let responseData = Buffer.alloc(0);
+      
+      socket.on('data', (chunk) => {
+        // 拼接响应数据
+        const newData = Buffer.alloc(responseData.length + chunk.length);
+        newData.set(new Uint8Array(responseData), 0);
+        newData.set(new Uint8Array(chunk), responseData.length);
+        responseData = newData;
+
+        // 查找头部结束位置
+        const headerEndIndex = indexOfDoubleCRLF(responseData);
+        
+        if (headerEndIndex !== -1) {
+          // 已找到头部结束位置，可以解析响应
+          const headerBytes = responseData.subarray(0, headerEndIndex);
+          const bodyBytes = responseData.subarray(headerEndIndex + 4);
+
+          // 解析头部
+          const headerText = new TextDecoder().decode(headerBytes);
+          const [statusLine, ...headerLines] = headerText.split("\r\n");
+          const [httpVersion, statusCode, ...statusTextParts] = statusLine.split(" ");
+          const statusText = statusTextParts.join(" ");
+
+          // 构造响应头
+          const headers = new Headers();
+          
+          headerLines.forEach((line) => {
+            if (line.trim() === '') return;
+            
+            const separatorIndex = line.indexOf(': ');
+            if (separatorIndex > 0) {
+              const name = line.substring(0, separatorIndex).trim();
+              const value = line.substring(separatorIndex + 2).trim();
+              
+              // 过滤掉一些特定的头
+              if (!name.toLowerCase().startsWith('cf-') && 
+                  !name.toLowerCase().startsWith('x-vercel-') && 
+                  !name.toLowerCase().startsWith('cloudflare-')) {
+                headers.set(name, value);
+              }
+            }
+          });
+
+          // 添加CORS头
+          headers.set('Access-Control-Allow-Origin', '*');
+          headers.set('Access-Control-Allow-Headers', '*');
+
+          // 对于重定向响应，修改Location头
+          const status = parseInt(statusCode, 10);
+          if ([301, 302, 303, 307, 308].includes(status) && headers.has('location')) {
+            const locationUrl = new URL(headers.get('location'), url);
+            headers.set('location', proxify(locationUrl.href));
+          }
+
+          // 对于HLS内容，代理化URL
+          if (headers.get('content-type') === 'application/vnd.apple.mpegurl') {
+            const bodyText = new TextDecoder().decode(bodyBytes);
+            const proxifiedBody = proxify(bodyText);
+            
+            // 移除socket监听器
+            socket.removeAllListeners();
+            socket.destroy();
+            
+            resolve(new Response(proxifiedBody, {
+              status,
+              statusText,
+              headers
+            }));
+            
+            return;
+          }
+
+          // 创建响应
+          const response = new Response(
+            new Blob([bodyBytes]), 
+            {
+              status,
+              statusText,
+              headers
+            }
+          );
+
+          // 移除socket监听器
+          socket.removeAllListeners();
+          socket.destroy();
+          
+          resolve(response);
+        }
+      });
+
+      socket.on('end', () => {
+        if (responseData.length === 0) {
+          // 没有接收到任何数据
+          resolve(new Response('未接收到任何响应数据', { status: 502 }));
+        }
+      });
+
+      // 设置超时
+      socket.setTimeout(10000, () => {
+        socket.destroy();
+        reject(new Response('连接超时', { status: 504 }));
+      });
+    } catch (error) {
+      console.error('fetchOverTcp异常:', error);
+      reject(new Response(`TCP代理错误: ${error.message}`, { status: 500 }));
+    }
+  });
 }
 
 /**
  * 处理代理请求的核心逻辑
- * @param {Object} req - 请求对象 (可以是Express或适配的请求)
- * @param {Object} res - 响应对象 (可以是Express或适配的响应)
+ * @param {Object} req - 请求对象
+ * @param {Object} res - 响应对象
  * @returns {Promise} - 处理结果的Promise
  */
 export async function handleProxyRequest(req, res, isServerless = false) {
-  // 在一开始就标记是否已经响应，避免多次响应
-  let hasResponded = false;
-  
   try {
     // 获取查询参数
-    const videoUrl = req.query?.url || req.url?.searchParams?.get('url')
-    const customReferer = req.query?.referer || req.url?.searchParams?.get('referer')
+    const videoUrl = req.query?.url || req.url?.searchParams?.get('url');
     
     if (!videoUrl) {
-      hasResponded = true;
       return isServerless 
         ? new Response(JSON.stringify({ error: '缺少视频URL参数' }), { 
             status: 400,
             headers: { 'Content-Type': 'application/json' }
           })
-        : res.status(400).json({ error: '缺少视频URL参数' })
+        : res.status(400).json({ error: '缺少视频URL参数' });
     }
 
     // 处理URL
-    let processedUrl = videoUrl
+    let processedUrl = videoUrl;
     
-    // 如果 videoUrl结尾是 ?live=true 或 &live%3Dtrue 则去掉
-    processedUrl = processedUrl.replace(/(?:\?|&)(live=true|live%3Dtrue)$/, '')
+    // 处理特殊URL格式
+    processedUrl = processedUrl.replace(/(?:\?|&)(live=true|live%3Dtrue)$/, '');
     
     if (processedUrl.includes('_the_proxy_ts_url_')) {
-      const tpProxyUrl_split_arr = processedUrl.split('_the_proxy_ts_url_')
-      const tsProxyUrl_0 = tpProxyUrl_split_arr[0]
-      const tsProxyUrl_1 = tpProxyUrl_split_arr[1]
-      processedUrl = tsProxyUrl_0 + '?ts=' + tsProxyUrl_1
+      const tpProxyUrl_split_arr = processedUrl.split('_the_proxy_ts_url_');
+      const tsProxyUrl_0 = tpProxyUrl_split_arr[0];
+      const tsProxyUrl_1 = tpProxyUrl_split_arr[1];
+      processedUrl = tsProxyUrl_0 + '?ts=' + tsProxyUrl_1;
     }
     
-    // 解析视频URL
-    const targetUrl = new URL(processedUrl)
-    
-    // 根据请求判断是否来自移动设备
-    const userAgent = req.headers?.['user-agent'] || ''
-    const isMobile = /mobile|android|iphone|ipad/i.test(userAgent)
-
-    // 选择合适的默认UA
-    const defaultUA = isMobile 
-      ? 'Mozilla/5.0 (Linux; Android 10; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.162 Mobile Safari/537.36'
-      : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-
-    // 创建请求配置
-    const options = {
-      hostname: targetUrl.hostname,
-      port: targetUrl.port || (targetUrl.protocol === 'https:' ? 443 : 80),
-      path: targetUrl.pathname + targetUrl.search,
+    // 使用TCP代理进行请求
+    const targetUrl = new URL(processedUrl);
+    const proxyRequest = new Request(targetUrl.toString(), {
       method: 'GET',
-      headers: {
-        'User-Agent': req.headers?.['user-agent'] || defaultUA,
+      headers: new Headers({
+        'User-Agent': req.headers?.['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         'Range': req.headers?.range || '',
-        'Referer': customReferer || targetUrl.origin,
+        'Referer': targetUrl.origin,
         'Origin': targetUrl.origin,
-        'Host': targetUrl.host,
-        'Accept': '*/*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'identity',
-        'Connection': 'keep-alive',
-        'Pragma': 'no-cache',
-        'Cache-Control': 'no-cache'
-      },
-      timeout: 0,
-      keepAlive: true,
-      keepAliveMsecs: 1000,
-    }
+      }),
+      redirect: 'manual' // 手动处理重定向
+    });
     
-    // 判断目标主机是IPv4还是IPv6，设置对应的family参数
-    if (isIPv4(targetUrl.hostname)) {
-      options.family = 4;
-    } else if (isIPv6(targetUrl.hostname)) {
-      options.family = 6;
-    } else {
-      // 对于域名，不设置family，让系统自动选择
-    }
-    
-    // 复制可能有用的请求头
+    // 添加其他有用的请求头
     const headersToForward = [
       'if-none-match', 'if-modified-since', 'cookie', 'authorization'
-    ]
+    ];
     
     headersToForward.forEach(header => {
       if (req.headers?.[header]) {
-        options.headers[header] = req.headers[header]
+        proxyRequest.headers.set(header, req.headers[header]);
       }
-    })
+    });
     
-    // 始终优先使用自定义Referer
-    if (customReferer) {
-      options.headers['Referer'] = customReferer
-      
-      // 从Referer中提取Origin
-      try {
-        const refererUrl = new URL(customReferer)
-        options.headers['Origin'] = `${refererUrl.protocol}//${refererUrl.host}`
-      } catch (e) {
-        // 如果解析失败，使用默认Origin
-        console.warn('无法从Referer解析Origin:', e)
-      }
-    }
+    // 执行TCP代理请求
+    const proxyResponse = await fetchOverTcp(proxyRequest);
     
     // Serverless环境处理
     if (isServerless) {
-      hasResponded = true;
-      return await fetchWithProxy(targetUrl, options, customReferer)
+      return proxyResponse;
     }
     
     // Express环境处理
-    return await new Promise((resolve, reject) => {
-      // 选择http或https模块
-      const requestLib = targetUrl.protocol === 'https:' ? https : http
-      
-      // 发起代理请求
-      const proxyReq = requestLib.request(options, (proxyRes) => {
-        try {
-          if (proxyRes.socket) {
-            proxyRes.socket.setNoDelay(true);
-            // 禁用Nagle算法，提高实时性能
-            proxyRes.socket.setKeepAlive(true, 60000); // 设置更长的保活时间
-          }
-          
-          // 复制响应头
-          Object.entries(proxyRes.headers).forEach(([key, value]) => {
-            // 过滤掉Cloudflare和Vercel的header
-            if (value && !key.toLowerCase().startsWith('cf-') && 
-                !key.toLowerCase().startsWith('x-vercel-') && 
-                !key.toLowerCase().startsWith('cloudflare-')) {
-              res.setHeader(key, value)
-            }
-          })
-          
-          // 设置CORS头
-          res.setHeader('Access-Control-Allow-Origin', '*')
-          res.setHeader('Access-Control-Allow-Headers', '*')
-          
-          // 设置状态码
-          res.statusCode = proxyRes.statusCode || 200
-          
-          // 对于流媒体，使用管道直接传输更高效
-          proxyRes.pipe(res)
-          
-          proxyRes.on('end', () => {
-            // 流结束后才resolve promise
-            resolve()
-          })
-          
-          proxyRes.on('error', (streamError) => {
-            console.error('流传输错误:', streamError)
-            // 如果头已经发送，就不能再发送错误响应
-            // 只能结束响应并reject promise
-            if (!res.headersSent) {
-              res.status(500).json({ error: `流传输错误: ${streamError.message}` })
-            }
-            reject(streamError)
-          })
-        } catch (error) {
-          console.error('处理响应时出错:', error)
-          if (!res.headersSent) {
-            res.status(500).json({ error: `处理响应失败: ${error.message}` })
-          }
-          reject(error)
-        }
-      })
-      
-      // 错误处理
-      proxyReq.on('error', (error) => {
-        console.error('代理请求错误:', error)
-        
-        // 立即销毁连接，避免等待超时
-        proxyReq.destroy();
-        
-        // 特别处理ECONNRESET错误
-        if (error.code === 'ECONNRESET') {
-          console.warn('连接被重置，尝试重新发送请求')
-          
-          // 使用计数器和递归函数实现多次重试
-          let retryCount = 0;
-          const maxRetries = 1;
-          
-          const retryRequest = () => {
-            retryCount++;
-            console.log(`开始第${retryCount}次重试...`);
-            
-            // 延迟500ms后重试请求
-            setTimeout(() => {
-              const retryReq = requestLib.request(options, (retryRes) => {
-                try {
-                  // 与原始代码相同的响应处理逻辑
-                  if (retryRes.socket) {
-                    retryRes.socket.setNoDelay(true);
-                    retryRes.socket.setKeepAlive(true, 60000); // 设置更长的保活时间
-                  }
-                  
-                  Object.entries(retryRes.headers).forEach(([key, value]) => {
-                    if (value) {
-                      res.setHeader(key, value)
-                    }
-                  })
-                  
-                  res.setHeader('Access-Control-Allow-Origin', '*')
-                  res.setHeader('Access-Control-Allow-Headers', '*')
-                  
-                  res.statusCode = retryRes.statusCode || 200
-                  
-                  // 对于流媒体，使用管道直接传输更高效
-                  retryRes.pipe(res)
-                  
-                  retryRes.on('end', () => {
-                    // 流结束后才resolve promise
-                    resolve()
-                  })
-                  
-                  retryRes.on('error', (streamError) => {
-                    console.error('重试流传输错误:', streamError)
-                    // 如果头已经发送，就不能再发送错误响应
-                    if (!res.headersSent) {
-                      res.status(500).json({ error: `重试流传输错误: ${streamError.message}` })
-                    }
-                    reject(streamError)
-                  })
-                } catch (error) {
-                  console.error('处理重试响应时出错:', error)
-                  if (!res.headersSent) {
-                    res.status(500).json({ error: `处理重试响应失败: ${error.message}` })
-                  }
-                  reject(error)
-                }
-              })
-              
-              retryReq.on('error', (retryError) => {
-                console.error(`第${retryCount}次重试失败:`, retryError)
-                
-                // 立即销毁连接，避免等待超时
-                retryReq.destroy();
-                
-                // 如果还有重试次数，继续重试
-                if (retryCount < maxRetries && retryError.code === 'ECONNRESET') {
-                  retryRequest();
-                } else {
-                  if (!res.headersSent) {
-                    res.status(500).json({ error: `重试代理请求失败: ${retryError.message}` })
-                  }
-                  reject(retryError)
-                }
-              })
-              
-              // 设置超时，与主请求保持一致
-              retryReq.setTimeout(30000, () => {
-                retryReq.destroy()
-                if (!res.headersSent) {
-                  res.status(504).json({ error: '重试请求超时' })
-                }
-                reject(new Error('重试请求超时'))
-              })
-              
-              retryReq.end()
-            }, 500)
-          };
-          
-          // 开始第一次重试
-          retryRequest();
-          
-          return
-        }
-        
-        if (!res.headersSent) {
-          res.status(500).json({ error: `代理请求失败: ${error.message}` })
-        }
-        reject(error)
-      })
-      
-      // 超时处理
-      proxyReq.setTimeout(30000, () => {
-        proxyReq.destroy()
-        if (!res.headersSent) {
-          res.status(504).json({ error: '代理请求超时' })
-        }
-        reject(new Error('代理请求超时'))
-      })
-      
-      // 结束请求
-      proxyReq.end()
-    })
-  } catch (error) {
-    console.error('代理处理错误:', error)
-    // 避免重复响应
-    if (hasResponded || res.headersSent) {
-      console.warn('已经发送了响应，忽略错误处理');
-      return;
+    // 复制响应头
+    for (const [key, value] of proxyResponse.headers.entries()) {
+      res.setHeader(key, value);
     }
+    
+    // 设置状态码
+    res.statusCode = proxyResponse.status;
+    
+    // 获取响应体并发送
+    const responseBody = await proxyResponse.arrayBuffer();
+    res.end(Buffer.from(responseBody));
+    
+    return;
+  } catch (error) {
+    console.error('代理处理错误:', error);
     
     return isServerless
       ? new Response(JSON.stringify({ error: `代理处理失败: ${error.message}` }), { 
           status: 500,
           headers: { 'Content-Type': 'application/json' }
         })
-      : res.status(500).json({ error: `代理处理失败: ${error.message}` })
-  }
-}
-
-/**
- * 使用fetch API处理代理请求 (用于Serverless环境)
- */
-async function fetchWithProxy(targetUrl, options, customReferer) {
-  const headers = new Headers(options.headers)
-  
-  // 确保自定义Referer被正确设置
-  if (customReferer) {
-    headers.set('Referer', customReferer)
-    
-    try {
-      const refererUrl = new URL(customReferer)
-      headers.set('Origin', `${refererUrl.protocol}//${refererUrl.host}`)
-    } catch (e) {
-      console.warn('无法从Referer解析Origin:', e)
-    }
-  }
-  
-  let retries = 0;
-  const maxRetries = 1;
-  
-  while (retries <= maxRetries) {
-    try {
-      // 执行fetch请求
-      const response = await fetch(targetUrl.toString(), {
-        method: 'GET',
-        headers,
-        redirect: 'follow',
-      });
-      
-      // 创建一个TransformStream来处理分块
-      const transformStream = new TransformStream({
-        transform(chunk, controller) {
-          // 立即传递数据块，减少等待时间
-          controller.enqueue(chunk);
-        }
-      });
-      
-      // 将输入流通过转换流传递到输出
-      const responseBody = response.body.pipeThrough(transformStream);
-      
-      // 创建响应头
-      const responseHeaders = new Headers(response.headers)
-      
-      // 过滤掉Cloudflare和Vercel的header
-      for (const [key, value] of responseHeaders.entries()) {
-        if (key.toLowerCase().startsWith('cf-') || 
-            key.toLowerCase().startsWith('x-vercel-') || 
-            key.toLowerCase().startsWith('cloudflare-')) {
-          responseHeaders.delete(key)
-        }
-      }
-      
-      responseHeaders.set('Access-Control-Allow-Origin', '*')
-      responseHeaders.set('Access-Control-Allow-Headers', '*')
-      
-      return new Response(responseBody, {
-        status: response.status,
-        headers: responseHeaders
-      })
-    } catch (error) {
-      retries++;
-      
-      // 如果是最后一次重试还失败，则抛出错误
-      if (retries > maxRetries) {
-        console.error('Serverless代理请求失败，已重试最大次数:', error);
-        throw error;
-      }
-      
-      // 短暂延迟后重试
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
+      : res.status(500).json({ error: `代理处理失败: ${error.message}` });
   }
 } 
