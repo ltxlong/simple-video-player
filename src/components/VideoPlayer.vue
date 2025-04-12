@@ -486,7 +486,7 @@ const initPlayer = (url: string) => {
                 manifestLoadingMaxRetry: 3,
                 levelLoadingTimeOut: 10000,
                 levelLoadingMaxRetry: 3,
-                fragLoadingTimeOut: 30000,
+                fragLoadingTimeOut: 60000,
                 fragLoadingMaxRetry: 5,
                 fragLoadingRetryDelay: 1000,
                 enableWorker: true,
@@ -990,7 +990,7 @@ function customLoaderFactory() {
 
                       // 确保URL格式正确（防止双重编码）
                       let proxyTsUrl = encodeURIComponent(tsUrl)
-                      let finalUrl = `/api/proxy?url=${proxyTsUrl}&referer=${encodeURIComponent(originalUrl)}`
+                      let finalUrl = `/api/proxy?url=${proxyTsUrl}`
                       
                       // 特殊情况处理
                       if (line.includes('.m3u8?ts=')) {
@@ -1025,7 +1025,7 @@ function customLoaderFactory() {
           const loadatetimeout = context.loadatetimeout || 0;
           
           // 添加请求超时
-          context.loadatetimeout = loadatetimeout > 0 ? loadatetimeout : 30000;
+          context.loadatetimeout = loadatetimeout > 0 ? loadatetimeout : 60000;
           
           // 修改XHR对象以添加自定义头
           const originalXhrSetup = config.xhrSetup;
@@ -1043,23 +1043,6 @@ function customLoaderFactory() {
               xhr.responseType = 'arraybuffer';
             }
             
-            // 修改URL，确保传递正确的referer参数
-            if (url.includes('/api/proxy?url=') && !url.includes('&referer=')) {
-              try {
-                // 从m3u8 URL中提取referer信息
-                const m3u8Url = context.url || '';
-                const refererMatch = m3u8Url.match(/&referer=([^&]+)/);
-                
-                if (refererMatch && refererMatch[1]) {
-                  const referer = decodeURIComponent(refererMatch[1]);
-                  // 修改URL以包含referer参数
-                  const currentMethod = xhr.readyState > 0 ? 'GET' : 'GET'; // XMLHttpRequest没有method属性
-                  xhr.open(currentMethod, `${url}&referer=${encodeURIComponent(referer)}`, true);
-                }
-              } catch (error) {
-                console.warn('为TS片段添加Referer时出错:', error);
-              }
-            }
           };
           
           // 处理HTTP错误
@@ -1076,36 +1059,6 @@ function customLoaderFactory() {
               status,
               errorType
             });
-            
-            // 处理特定错误
-            if (status === 403) {
-              console.warn('收到403 Forbidden，尝试调整请求');
-              
-              // 如果已经在使用代理，尝试找到替代解决方案
-              if (requestURL.includes('/api/proxy?url=')) {
-                console.warn('代理请求也返回403，可能需要特定的访问凭证');
-                
-                // 尝试检查URL是否包含referer参数
-                if (!requestURL.includes('&referer=')) {
-                  try {
-                    // 从上下文中推断referer
-                    const m3u8Url = context.url || '';
-                    const urlObj = new URL(m3u8Url.split('/api/proxy?url=')[1]);
-                    const referer = encodeURIComponent(urlObj.origin);
-                    
-                    // 创建新的请求URL
-                    const newURL = `${requestURL}&referer=${referer}`;
-                    
-                    // 重新加载使用新URL
-                    context.url = newURL;
-                    load(context, config, callbacks);
-                    return;
-                  } catch (error) {
-                    console.error('尝试修复URL时出错:', error);
-                  }
-                }
-              }
-            }
             
             // 调用原始错误回调
             if (originalOnError) {
