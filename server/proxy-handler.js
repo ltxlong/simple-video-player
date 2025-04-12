@@ -161,7 +161,10 @@ export async function handleProxyRequest(req, res, isServerless = false) {
           
           // 复制响应头
           Object.entries(proxyRes.headers).forEach(([key, value]) => {
-            if (value) {
+            // 过滤掉Cloudflare和Vercel的header
+            if (value && !key.toLowerCase().startsWith('cf-') && 
+                !key.toLowerCase().startsWith('x-vercel-') && 
+                !key.toLowerCase().startsWith('cloudflare-')) {
               res.setHeader(key, value)
             }
           })
@@ -169,13 +172,6 @@ export async function handleProxyRequest(req, res, isServerless = false) {
           // 设置CORS头
           res.setHeader('Access-Control-Allow-Origin', '*')
           res.setHeader('Access-Control-Allow-Headers', '*')
-
-          // 删除Content-Length头，避免与Transfer-Encoding冲突
-          if (res.hasHeader('Content-Length')) {
-            res.removeHeader('Content-Length')
-          }
-          res.setHeader('Transfer-Encoding', 'chunked')
-          res.setHeader('X-Content-Type-Options', 'nosniff')
           
           // 设置状态码
           res.statusCode = proxyRes.statusCode || 200
@@ -244,12 +240,6 @@ export async function handleProxyRequest(req, res, isServerless = false) {
                   res.setHeader('Access-Control-Allow-Origin', '*')
                   res.setHeader('Access-Control-Allow-Headers', '*')
                   
-                  // 删除Content-Length头，避免与Transfer-Encoding冲突
-                  if (res.hasHeader('Content-Length')) {
-                    res.removeHeader('Content-Length')
-                  }
-                  res.setHeader('Transfer-Encoding', 'chunked')
-                  res.setHeader('X-Content-Type-Options', 'nosniff')
                   res.statusCode = retryRes.statusCode || 200
                   
                   // 对于流媒体，使用管道直接传输更高效
@@ -391,15 +381,18 @@ async function fetchWithProxy(targetUrl, options, customReferer) {
       
       // 创建响应头
       const responseHeaders = new Headers(response.headers)
+      
+      // 过滤掉Cloudflare和Vercel的header
+      for (const [key, value] of responseHeaders.entries()) {
+        if (key.toLowerCase().startsWith('cf-') || 
+            key.toLowerCase().startsWith('x-vercel-') || 
+            key.toLowerCase().startsWith('cloudflare-')) {
+          responseHeaders.delete(key)
+        }
+      }
+      
       responseHeaders.set('Access-Control-Allow-Origin', '*')
       responseHeaders.set('Access-Control-Allow-Headers', '*')
-      
-      // 删除Content-Length头，避免与Transfer-Encoding冲突
-      if (responseHeaders.has('Content-Length')) {
-        responseHeaders.delete('Content-Length')
-      }
-      responseHeaders.set('Transfer-Encoding', 'chunked')
-      responseHeaders.set('X-Content-Type-Options', 'nosniff')
       
       return new Response(responseBody, {
         status: response.status,
