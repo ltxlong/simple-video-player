@@ -486,7 +486,7 @@ const initPlayer = (url: string) => {
                 manifestLoadingMaxRetry: 3,
                 levelLoadingTimeOut: 10000,
                 levelLoadingMaxRetry: 3,
-                fragLoadingTimeOut: 60000,
+                fragLoadingTimeOut: 30000,
                 fragLoadingMaxRetry: 5,
                 fragLoadingRetryDelay: 1000,
                 enableWorker: true,
@@ -1025,7 +1025,7 @@ function customLoaderFactory() {
           const loadatetimeout = context.loadatetimeout || 0;
           
           // 添加请求超时
-          context.loadatetimeout = loadatetimeout > 0 ? loadatetimeout : 60000;
+          context.loadatetimeout = loadatetimeout > 0 ? loadatetimeout : 30000;
           
           // 修改XHR对象以添加自定义头
           const originalXhrSetup = config.xhrSetup;
