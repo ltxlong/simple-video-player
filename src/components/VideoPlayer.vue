@@ -564,10 +564,15 @@ const initPlayer = (url: string) => {
               })
 
               if (isLocalhost() || url.endsWith('live=true') || url.endsWith('live%3Dtrue')) {
-                
-                const actualUrl = url.startsWith('http://') && !url.includes('/api/proxy?url=') ? `/api/proxy?url=${encodeURIComponent(url)}` : url
+
+                url = url.replace(/(?:\?|&)(live=true|live%3Dtrue)$/, '');
+
+                let actualUrl = url.startsWith('http://') && !url.includes('/api/proxy?url=') ? `/api/proxy?url=${encodeURIComponent(url)}` : url
                 if (actualUrl.includes('/api/proxy?url=')) {
                   useProxyUrl.value = true
+
+                  // 添加代理URL
+                  //actualUrl += '&proxy_url=true';
                 }
 
                 hls.loadSource(actualUrl)
