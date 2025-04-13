@@ -724,8 +724,6 @@ export async function handleProxyRequest(req, res, isServerless = false) {
     let processedUrl = videoUrl;
     
     // 处理特殊URL格式
-    processedUrl = processedUrl.replace(/(?:\?|&)(live=true|live%3Dtrue)$/, '');
-    
     if (processedUrl.includes('_the_proxy_ts_url_')) {
       const tpProxyUrl_split_arr = processedUrl.split('_the_proxy_ts_url_');
       const tsProxyUrl_0 = tpProxyUrl_split_arr[0];
@@ -734,6 +732,88 @@ export async function handleProxyRequest(req, res, isServerless = false) {
     }
     
     try {
+
+      // 尝试从请求参数中获取proxy_live_url
+      const proxyLiveUrl = 
+        req.query?.proxy_live_url || 
+        req.url?.searchParams?.get('proxy_live_url');
+
+      if (proxyLiveUrl) {
+        console.log(`检测到代理URL配置，将使用代理: ${proxyLiveUrl}`);
+        
+        // 构造指向代理的URL
+        const proxyUrl = new URL(proxyLiveUrl);
+        // 将原始URL作为参数添加到代理URL
+        proxyUrl.searchParams.set('url', processedUrl);
+        
+        // 创建代理请求
+        const proxyRequest = new Request(proxyUrl.toString(), {
+          method: 'GET',
+          headers: new Headers({
+            'User-Agent': req.headers?.['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Range': req.headers?.range || ''
+          }),
+          redirect: 'follow' // 允许代理服务器处理重定向
+        });
+        
+        // 添加其他有用的请求头
+        const headersToForward = [
+          'if-none-match', 'if-modified-since', 'cookie', 'authorization'
+        ];
+        
+        headersToForward.forEach(header => {
+          if (req.headers?.[header]) {
+            proxyRequest.headers.set(header, req.headers[header]);
+          }
+        });
+        
+        // 执行fetch请求到配置的代理
+        console.log('使用配置的代理请求:', proxyUrl.toString());
+        const proxyResponse = await fetchWithTimeout(proxyRequest);
+        
+        // Serverless环境处理
+        if (isServerless) {
+          // 确保CORS头存在
+          const headers = filterPlatformHeaders(proxyResponse.headers);
+          headers.set('Access-Control-Allow-Origin', '*');
+          headers.set('Access-Control-Allow-Headers', '*');
+          
+          return new Response(proxyResponse.body, {
+            status: proxyResponse.status,
+            statusText: proxyResponse.statusText,
+            headers: headers
+          });
+        }
+        
+        // Express环境处理
+        try {
+          // 复制响应头
+          const filteredHeaders = filterPlatformHeaders(proxyResponse.headers);
+          for (const [key, value] of filteredHeaders.entries()) {
+            res.setHeader(key, value);
+          }
+          
+          // 确保CORS头存在
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Allow-Headers', '*');
+          
+          // 设置状态码
+          res.statusCode = proxyResponse.status;
+          
+          // 获取响应体并发送
+          const responseBody = await proxyResponse.arrayBuffer();
+          res.end(Buffer.from(responseBody));
+        } catch (error) {
+          console.error('发送代理响应时出错:', error);
+          if (!res.headersSent) {
+            res.status(500).json({ error: `发送代理响应时出错: ${error.message}` });
+          }
+        }
+        
+        return;
+      }
+      
+      // 未配置代理URL，使用原始逻辑
       const targetUrl = new URL(processedUrl);
       const hostname = targetUrl.hostname;
       const port = targetUrl.port || (targetUrl.protocol === 'https:' ? 443 : 80);
@@ -741,7 +821,7 @@ export async function handleProxyRequest(req, res, isServerless = false) {
       // 检查是否是IP地址
       if (isIP(hostname)) {
         console.log(`检测到IP地址: ${hostname}，将使用TCP代理`);
-        if (connect || net) {  
+        if (connect || net) {  
           return await handleTCPProxy(hostname, port, req, res, isServerless);
         } else {
           console.log('没有可用的TCP代理实现，将使用fetch代理');
