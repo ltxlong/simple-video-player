@@ -13,7 +13,8 @@ let net;
 try {
   net = require('net');
 } catch (e) {
-  console.log('不能导入net模块');
+  // 在Cloudflare环境中可能没有net模块
+  console.log('不能导入net模块，可能在Cloudflare环境中');
 }
 
 /**
@@ -331,9 +332,21 @@ async function constructHttpResponse(tcpSocket, timeout = 30000) {
 
         console.log("响应状态码:", statusCode);
         
+        // 处理206部分内容响应
+        const status = parseInt(statusCode) || 200;
+        const isPartialContent = status === 206;
+        
+        if (isPartialContent) {
+          console.log("检测到206部分内容响应");
+          // 确保Content-Range头存在
+          if (responseHeaders["content-range"]) {
+            console.log("Content-Range:", responseHeaders["content-range"]);
+          }
+        }
+        
         // 构建响应对象
         const responseInit = {
-          status: parseInt(statusCode) || 200,
+          status: status,
           statusText: statusText || "OK",
           headers: new Headers(responseHeaders)
         };
@@ -344,16 +357,42 @@ async function constructHttpResponse(tcpSocket, timeout = 30000) {
 
         // 创建适当的流
         let stream;
-        if (responseHeaders["content-length"]) {
-          // 使用固定长度流
-          if (typeof FixedLengthStream !== 'undefined') {
-            stream = new FixedLengthStream(parseInt(responseHeaders["content-length"]));
+        
+        // 对于部分内容响应，确保使用正确的流类型
+        if (isPartialContent && responseHeaders["content-range"]) {
+          // 从Content-Range头解析大小 (例如: "bytes 0-1023/10485760")
+          const match = responseHeaders["content-range"].match(/bytes\s+(\d+)-(\d+)\/(\d+|\*)/);
+          if (match) {
+            const start = parseInt(match[1]);
+            const end = parseInt(match[2]);
+            const size = match[3] === '*' ? null : parseInt(match[3]);
+            const contentLength = end - start + 1;
+            
+            console.log(`部分内容范围: ${start}-${end}/${size || '未知'}, 长度: ${contentLength}字节`);
+            
+            if (typeof FixedLengthStream !== 'undefined') {
+              stream = new FixedLengthStream(contentLength);
+            } else {
+              stream = new TransformStream();
+            }
           } else {
-            // 如果不支持FixedLengthStream，则使用TransformStream
+            // 无法解析Content-Range，回退到TransformStream
             stream = new TransformStream();
           }
-        } else {
-          // 使用转换流
+        } 
+        // 使用Content-Length
+        else if (responseHeaders["content-length"]) {
+          const contentLength = parseInt(responseHeaders["content-length"]);
+          console.log(`内容长度: ${contentLength}字节`);
+          
+          if (typeof FixedLengthStream !== 'undefined') {
+            stream = new FixedLengthStream(contentLength);
+          } else {
+            stream = new TransformStream();
+          }
+        } 
+        // 没有明确的长度信息，使用普通TransformStream
+        else {
           stream = new TransformStream();
         }
         
@@ -661,11 +700,7 @@ export async function handleProxyRequest(req, res, isServerless = false) {
       // 检查是否是IP地址
       if (isIP(hostname)) {
         console.log(`检测到IP地址: ${hostname}，使用TCP代理`);
-        if (connect || net) {
-          return await handleTCPProxy(hostname, port, req, res, isServerless);
-        } else {
-          console.log('没有可用的TCP代理实现，使用fetch代理');
-        }
+        return await handleTCPProxy(hostname, port, req, res, isServerless);
       }
       
       // 对于域名，继续使用HTTP代理
