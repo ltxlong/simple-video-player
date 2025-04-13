@@ -490,13 +490,15 @@ const initPlayer = (url: string) => {
                 fragLoadingMaxRetry: 5,
                 fragLoadingRetryDelay: 1000,
                 enableWorker: true,
-                lowLatencyMode: !url.endsWith('live=true') || !url.endsWith('live%3Dtrue'),
+                lowLatencyMode: true,
                 backBufferLength: 90,
                 //progressive: true, // 这个参数可能会让广告过滤失败，故注释掉
                 appendErrorMaxRetry: 5,
-                liveSyncDurationCount: 5,
+                liveSyncDurationCount: 3,
+                liveMaxLatencyDurationCount: 5,
                 stretchShortVideoTrack: true,
                 abrMaxWithRealBitrate: true,
+                liveDurationInfinity: true,
 
                 // 添加自定义加载器
                 loader: customLoaderFactory(),
