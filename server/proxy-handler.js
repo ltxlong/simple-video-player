@@ -54,6 +54,48 @@ function isIP(str) {
 }
 
 /**
+ * 过滤掉Cloudflare和Vercel相关的HTTP头
+ * @param {Headers|Object} headers - 原始头信息
+ * @returns {Headers} - 过滤后的头信息
+ */
+function filterPlatformHeaders(headers) {
+  const filteredHeaders = new Headers();
+  
+  // 处理Headers对象
+  if (headers instanceof Headers) {
+    for (const [key, value] of headers.entries()) {
+      // 跳过Cloudflare和Vercel相关头
+      if (key.toLowerCase().startsWith('cf-') || 
+          key.toLowerCase().startsWith('x-vercel-') ||
+          key.toLowerCase().startsWith('x-forwarded-') ||
+          (key.toLowerCase() === 'server' && (value.includes('cloudflare') || value.includes('vercel')))
+      ) {
+        console.log(`过滤平台头: ${key}`);
+        continue;
+      }
+      filteredHeaders.set(key, value);
+    }
+  } 
+  // 处理普通对象
+  else if (typeof headers === 'object') {
+    for (const [key, value] of Object.entries(headers)) {
+      // 跳过Cloudflare和Vercel相关头
+      if (key.toLowerCase().startsWith('cf-') || 
+          key.toLowerCase().startsWith('x-vercel-') ||
+          key.toLowerCase().startsWith('x-forwarded-') ||
+          (key.toLowerCase() === 'server' && (value.includes('cloudflare') || value.includes('vercel')))
+      ) {
+        console.log(`过滤平台头: ${key}`);
+        continue;
+      }
+      filteredHeaders.set(key, value);
+    }
+  }
+  
+  return filteredHeaders;
+}
+
+/**
  * 使用fetch API从远程服务器获取响应，支持连接和下载分离超时控制
  * @param {Request} request - 请求对象
  * @param {number} connectionTimeout - 连接超时时间(毫秒)
@@ -135,8 +177,8 @@ async function fetchWithTimeout(request, connectionTimeout = 5000, downloadTimeo
           // 清除下载超时
           clearTimeout(downloadTimeoutId);
           
-          // 设置新的头部
-          const newHeaders = new Headers(response.headers);
+          // 在返回新响应的地方过滤头部
+          const newHeaders = filterPlatformHeaders(response.headers);
           newHeaders.set('Cache-Control', 'no-cache, no-store, must-revalidate');
           newHeaders.set('Pragma', 'no-cache');
           newHeaders.set('Expires', '0');
@@ -186,11 +228,12 @@ async function fetchWithTimeout(request, connectionTimeout = 5000, downloadTimeo
           offset += chunk.length;
         }
         
-        // 返回新的响应
+        // 在普通响应处理部分:
+        const filteredHeaders = filterPlatformHeaders(response.headers);
         return new Response(bodyData, {
           status: response.status,
           statusText: response.statusText,
-          headers: response.headers
+          headers: filteredHeaders
         });
         
       } catch (error) {
@@ -347,7 +390,7 @@ async function constructHttpResponse(tcpSocket, timeout = 30000) {
         const responseInit = {
           status: status,
           statusText: statusText || "OK",
-          headers: new Headers(responseHeaders)
+          headers: filterPlatformHeaders(responseHeaders)
         };
         
         // 确保CORS头存在
@@ -467,7 +510,6 @@ async function handleTCPProxy(host, port, req, res, isServerless = false) {
   try {
     // 检查是否在Cloudflare环境
     if (connect) {
-      // 使用Cloudflare的connect函数
       console.log('使用Cloudflare Socket API进行TCP代理');
       
       try {
@@ -736,7 +778,7 @@ export async function handleProxyRequest(req, res, isServerless = false) {
       // Serverless环境处理
       if (isServerless) {
         // 确保CORS头存在
-        const headers = new Headers(proxyResponse.headers);
+        const headers = filterPlatformHeaders(proxyResponse.headers);
         headers.set('Access-Control-Allow-Origin', '*');
         headers.set('Access-Control-Allow-Headers', '*');
         
@@ -750,7 +792,8 @@ export async function handleProxyRequest(req, res, isServerless = false) {
       // Express环境处理
       try {
         // 复制响应头
-        for (const [key, value] of proxyResponse.headers.entries()) {
+        const filteredHeaders = filterPlatformHeaders(proxyResponse.headers);
+        for (const [key, value] of filteredHeaders.entries()) {
           res.setHeader(key, value);
         }
         
