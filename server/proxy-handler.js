@@ -13,8 +13,7 @@ let net;
 try {
   net = require('net');
 } catch (e) {
-  // 在Cloudflare环境中可能没有net模块
-  console.log('不能导入net模块，可能在Cloudflare环境中');
+  console.log('不能导入net模块');
 }
 
 /**
@@ -662,7 +661,11 @@ export async function handleProxyRequest(req, res, isServerless = false) {
       // 检查是否是IP地址
       if (isIP(hostname)) {
         console.log(`检测到IP地址: ${hostname}，使用TCP代理`);
-        return await handleTCPProxy(hostname, port, req, res, isServerless);
+        if (connect || net) {
+          return await handleTCPProxy(hostname, port, req, res, isServerless);
+        } else {
+          console.log('没有可用的TCP代理实现，使用fetch代理');
+        }
       }
       
       // 对于域名，继续使用HTTP代理
