@@ -530,7 +530,7 @@ const initPlayer = (url: string) => {
                     data.frag.endList = undefined;
 
                     const tmp_current_time = hls.media.currentTime
-                    hls.config.maxBufferLength = 1
+                    hls.config.maxBufferLength = 2
                     hls.loadSource(url)
                     hls.attachMedia(video)
                     hls.media.currentTime = tmp_current_time + tmp_time_add
