@@ -522,7 +522,7 @@ const initPlayer = (url: string) => {
               let tmp_time_add = 0.1
               let tmp_max_buffer_length = hls.config.maxBufferLength
               
-              hls.on(Hls.Events.FRAG_PARSED, (event,data) => {
+              hls.on(Hls.Events.FRAG_PARSED, (event, data) => {
 
                 if (data.frag.endList) {
                   
@@ -533,7 +533,7 @@ const initPlayer = (url: string) => {
                     const tmp_current_time = hls.media.currentTime
                     
                     if (tmp_time_add < 1) {
-                      hls.config.maxBufferLength = 2
+                      hls.config.maxBufferLength = 2 // 意味着距离广告点多少秒开始操作，也意味着漏会看几秒，建议 1~5；如果网速快可以设置为 1
                     } else {
                       hls.config.maxBufferLength = tmp_max_buffer_length
                     }
@@ -543,7 +543,7 @@ const initPlayer = (url: string) => {
                     hls.media.currentTime = tmp_current_time + tmp_time_add
 
                     if (tmp_time_add < 1) {
-                      tmp_time_add = 5
+                      tmp_time_add = 5 // 快进广告的速度，每次快进多少秒，建议 1~5，越大会导致漏看的越多，5是快进键的默认速度，和一般切片的大小也相近；如果不介意等的久，可以设置为 1
                     } else {
                       tmp_time_add = 0.1
                     }
@@ -554,7 +554,6 @@ const initPlayer = (url: string) => {
                     player.video.pause()
                   }
                 }
-                
               })
 
               // 绑定 HLS 事件
