@@ -519,6 +519,32 @@ const initPlayer = (url: string) => {
                 })
               }
 
+              let tmp_time_add = 0.1
+              
+              hls.on(Hls.Events.FRAG_PARSED, (event,data) => {
+
+                if (data.frag.endList) {
+                  
+                  if (parseInt(hls.media.currentTime) < parseInt(hls.media.duration)) {
+
+                    data.frag.endList = undefined;
+
+                    const tmp_current_time = hls.media.currentTime
+                    hls.config.maxBufferLength = 1
+                    hls.loadSource(url)
+                    hls.attachMedia(video)
+                    hls.media.currentTime = tmp_current_time + tmp_time_add
+                    tmp_time_add += 1
+                    
+                    player.video.play()
+
+                  } else {
+                    player.video.pause()
+                  }
+                }
+                
+              })
+
               // 绑定 HLS 事件
               hls.on(Hls.Events.ERROR, (event, data) => {
                 if (!hls) {
