@@ -520,6 +520,7 @@ const initPlayer = (url: string) => {
               }
 
               let tmp_time_add = 0.1
+              let tmp_max_buffer_length = hls.config.maxBufferLength
               
               hls.on(Hls.Events.FRAG_PARSED, (event,data) => {
 
@@ -530,11 +531,22 @@ const initPlayer = (url: string) => {
                     data.frag.endList = undefined;
 
                     const tmp_current_time = hls.media.currentTime
-                    hls.config.maxBufferLength = 2
+                    
+                    if (tmp_time_add < 1) {
+                      hls.config.maxBufferLength = 2
+                    } else {
+                      hls.config.maxBufferLength = tmp_max_buffer_length
+                    }
+
                     hls.loadSource(url)
                     hls.attachMedia(video)
                     hls.media.currentTime = tmp_current_time + tmp_time_add
-                    tmp_time_add += 1
+
+                    if (tmp_time_add < 1) {
+                      tmp_time_add = 5
+                    } else {
+                      tmp_time_add = 0.1
+                    }
                     
                     player.video.play()
 
