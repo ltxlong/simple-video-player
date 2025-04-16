@@ -991,7 +991,7 @@ function customLoaderFactory() {
                 let line = lines[i];
                 
                 if (line.startsWith('#EXT-X-DISCONTINUITY')) {
-                  if (i > 0 && lines[i - 1].startsWith('#EXT-X-PLAYLIST-TYPE')) {
+                  if (i > 0 && lines[i - 1].startsWith('#EXT-X-')) {
                         filteredLines.push(line);
 
                         continue;
