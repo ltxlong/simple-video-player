@@ -524,7 +524,7 @@ const initPlayer = (url: string) => {
               
               hls.on(Hls.Events.FRAG_PARSED, (event, data) => {
 
-                if (data.frag.endList) {
+                if (data.frag.endList && data.frag.minEndPTS < 60) {
                   
                   if (parseInt(hls.media.currentTime) < parseInt(hls.media.duration)) {
 
