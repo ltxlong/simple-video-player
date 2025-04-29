@@ -8,7 +8,7 @@
   "rewrites": [
     {
       "source": "/functions/api/search",
-      "destination": "/api/search-handler"
+      "destination": "/api/search"
     },
     {
       "source": "/api/:path*",
