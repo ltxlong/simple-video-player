@@ -21,7 +21,7 @@ export default async function handler(
   }
 
   try {
-    const { url, isPost, postData, className, searchInputClassName, keyword } = req.body
+    const { url, isPost, postData, className, keyword } = req.body
 
     if (!url) {
       return res.status(400).json({ error: '缺少必要的URL参数' })
