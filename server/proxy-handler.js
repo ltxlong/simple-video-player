@@ -71,7 +71,7 @@ function filterPlatformHeaders(headers) {
           (key.toLowerCase() === 'server' && (value.includes('cloudflare') || value.includes('vercel')))
       ) {
         console.log(`过滤平台头: ${key}`);
-        //continue;
+        continue;
       }
       filteredHeaders.set(key, value);
     }
@@ -748,15 +748,18 @@ export async function handleProxyRequest(req, res, isServerless = false) {
       }
       
       // 对于域名，继续使用HTTP代理
+      const headers = {
+        'User-Agent': req.headers?.['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': targetUrl.origin,
+        'Origin': targetUrl.origin,
+      };
+      if (req.headers?.range) {
+        headers['Range'] = req.headers.range;
+      }
       const proxyRequest = new Request(targetUrl.toString(), {
         method: 'GET',
-        headers: new Headers({
-          'User-Agent': req.headers?.['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          'Range': req.headers?.range || '',
-          'Referer': targetUrl.origin,
-          'Origin': targetUrl.origin,
-        }),
-        redirect: 'follow' // 手动处理重定向
+        headers: new Headers(headers),
+        redirect: 'follow'
       });
       
       // 添加其他有用的请求头
