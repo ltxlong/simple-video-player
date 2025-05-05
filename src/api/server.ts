@@ -57,7 +57,7 @@ export async function handleConfigRequest(request: Request, env: CloudflareEnv):
         const { loginPassword, ...publicConfig } = config
         return new Response(JSON.stringify(publicConfig), { headers: corsHeaders })
       }
-      
+        
       // 管理后台返回完整配置
       return new Response(JSON.stringify(config), { headers: corsHeaders })
     } else if (request.method === 'POST') {
@@ -70,6 +70,7 @@ export async function handleConfigRequest(request: Request, env: CloudflareEnv):
       }
       
       const config = await request.json()
+
       const result = await updateConfig(config, env)
       
       if (result.success) {
