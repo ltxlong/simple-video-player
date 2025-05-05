@@ -9,7 +9,14 @@ const defaultConfig: Config = {
   loginPassword: '',
   announcement: '',
   customTitle: '',
-  enableHealthFilter: true
+  enableHealthFilter: true,
+  proxyVideoUrl: '',
+  proxyLiveUrl: '',
+  enableHotMovies: false,
+  hotMoviesProxyUrl: '',
+  hotTvDefaultTag: '',
+  hotMovieDefaultTag: '',
+  autoPlayNext: false
 }
 
 /**
@@ -41,7 +48,7 @@ export async function getHomeConfig(): Promise<Config> {
       console.error('获取首页配置失败')
       
       // 如果是401错误
-      if (response.status === 401) {
+      if (response.status === 401 || response.status === 403) {
         // 如果有token但验证失败，清除token
         if (token) {
           sessionStorage.removeItem('token')
@@ -113,6 +120,14 @@ export async function getAdminConfig(): Promise<Config> {
     if (!response.ok) {
       const text = await response.text()
       console.error('获取管理配置失败')
+      // 如果是401、403错误
+      if (response.status === 401 || response.status === 403) {
+        // 如果有token但验证失败，清除token
+        if (token) {
+          sessionStorage.removeItem('adminToken')
+        }
+      }
+
       throw new Error('获取管理配置失败')
     }
 
