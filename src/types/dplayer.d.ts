@@ -9,6 +9,7 @@ declare module 'dplayer' {
     video: {
       url: string;
       type?: string;
+      pic?: string; 
       customType?: {
         [key: string]: (video: HTMLVideoElement, player: DPlayer) => void;
       };
@@ -20,6 +21,7 @@ declare module 'dplayer' {
     preload?: string;
     volume?: number;
     playbackSpeed?: number[];
+    contextmenu?: Array;
   }
 
   export default class DPlayer {
