@@ -11,6 +11,10 @@
       "destination": "/api/search"
     },
     {
+      "source": "/functions/api/search-json",
+      "destination": "/api/search-json"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/:path*"
     },
