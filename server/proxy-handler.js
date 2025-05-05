@@ -71,7 +71,7 @@ function filterPlatformHeaders(headers) {
           (key.toLowerCase() === 'server' && (value.includes('cloudflare') || value.includes('vercel')))
       ) {
         console.log(`过滤平台头: ${key}`);
-        continue;
+        //continue;
       }
       filteredHeaders.set(key, value);
     }
