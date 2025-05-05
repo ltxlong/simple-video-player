@@ -29,6 +29,7 @@ export default async function handler(
 
     // 构建请求选项
     const requestOptions: RequestInit = {
+      method: 'GET',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
@@ -41,7 +42,11 @@ export default async function handler(
     // 如果是POST请求
     if (isPost && postData) {
       requestOptions.method = 'POST'
-      requestOptions.headers['Content-Type'] = 'application/x-www-form-urlencoded'
+      requestOptions.headers = {
+        ...requestOptions.headers,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+      
       // 将JSON对象转换为URL编码的表单数据
       const params = new URLSearchParams()
       Object.entries(postData).forEach(([key, value]) => {
