@@ -7,14 +7,21 @@ import postgres from 'postgres'
 
 // 默认配置
 const defaultConfig: Config = {
-  resourceSites: process.env.RESOURCE_SITES ? JSON.parse(process.env.RESOURCE_SITES) : [],
-  parseApi: process.env.PARSE_API || '',
-  backgroundImage: process.env.BACKGROUND_IMAGE || '',
-  enableLogin: process.env.ENABLE_LOGIN === 'true',
-  loginPassword: process.env.LOGIN_PASSWORD || '',
-  announcement: process.env.ANNOUNCEMENT || '',
-  customTitle: process.env.CUSTOM_TITLE || '',
-  enableHealthFilter: process.env.ENABLE_HEALTH_FILTER === 'true'
+  resourceSites: [],
+  parseApi: '',
+  backgroundImage: '',
+  enableLogin: false,
+  loginPassword: '',
+  announcement: '',
+  customTitle: '',
+  enableHealthFilter: true,
+  proxyVideoUrl: '',
+  proxyLiveUrl: '',
+  enableHotMovies: false,
+  hotMoviesProxyUrl: '',
+  hotTvDefaultTag: '',
+  hotMovieDefaultTag: '',
+  autoPlayNext: false
 }
 
 // 验证JWT令牌
