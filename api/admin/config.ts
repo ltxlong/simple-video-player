@@ -7,14 +7,21 @@ import postgres from 'postgres'
 
 // 默认配置
 const defaultConfig: Config = {
-  resourceSites: process.env.RESOURCE_SITES ? JSON.parse(process.env.RESOURCE_SITES) : [],
-  parseApi: process.env.PARSE_API || '',
-  backgroundImage: process.env.BACKGROUND_IMAGE || '',
-  enableLogin: process.env.ENABLE_LOGIN === 'true',
-  loginPassword: process.env.LOGIN_PASSWORD || '',
-  announcement: process.env.ANNOUNCEMENT || '',
-  customTitle: process.env.CUSTOM_TITLE || '',
-  enableHealthFilter: process.env.ENABLE_HEALTH_FILTER === 'true'
+  resourceSites: [],
+  parseApi: '',
+  backgroundImage: '',
+  enableLogin: false,
+  loginPassword: '',
+  announcement: '',
+  customTitle: '',
+  enableHealthFilter: true,
+  proxyVideoUrl: '',
+  proxyLiveUrl: '',
+  enableHotMovies: false,
+  hotMoviesProxyUrl: '',
+  hotTvDefaultTag: '',
+  hotMovieDefaultTag: '',
+  autoPlayNext: false
 }
 
 // 验证JWT令牌
@@ -81,6 +88,7 @@ async function handleGetConfig(res: VercelResponse) {
     try {
       // withDatabase会自动选择使用SQL_DSN或PG_CONNECTION_STRING
       await withDatabase(async (connection, dbType) => {
+
         if (dbType === 'mysql') {
           // MySQL查询
           const mysqlConn = connection as mysql.PoolConnection
@@ -107,6 +115,7 @@ async function handleGetConfig(res: VercelResponse) {
             await pgConn`INSERT INTO configs (config) VALUES (${JSON.stringify(defaultConfig)})`
           }
         }
+
       })
     } catch (error) {
       console.error('数据库操作失败:', error)
@@ -134,6 +143,7 @@ async function handleUpdateConfig(req: VercelRequest, res: VercelResponse) {
     try {
       // withDatabase会自动选择使用SQL_DSN或PG_CONNECTION_STRING
       await withDatabase(async (connection, dbType) => {
+
         if (dbType === 'mysql') {
           // MySQL查询
           const mysqlConn = connection as mysql.PoolConnection
