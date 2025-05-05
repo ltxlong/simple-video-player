@@ -741,7 +741,7 @@ export async function handleProxyRequest(req, res, isServerless = false) {
       if (isIP(hostname)) {
         console.log(`检测到IP地址: ${hostname}，将使用TCP代理`);
         if (connect || net) {  
-          return await handleTCPProxy(hostname, port, req, res, isServerless);
+          //return await handleTCPProxy(hostname, port, req, res, isServerless);
         } else {
           console.log('没有可用的TCP代理实现，将使用fetch代理');
         }
@@ -756,7 +756,7 @@ export async function handleProxyRequest(req, res, isServerless = false) {
           'Referer': targetUrl.origin,
           'Origin': targetUrl.origin,
         }),
-        redirect: 'manual' // 手动处理重定向
+        redirect: 'follow' // 手动处理重定向
       });
       
       // 添加其他有用的请求头
