@@ -414,10 +414,10 @@ watch(() => props.enableHotMovies, (newVal) => {
     // 无论弹窗是否显示，都预先请求标签和热门数据
     fetchDoubanTags()
 
-    defaultTvTag.value = props.hotTvDefaultTag
-    defaultMovieTag.value = props.hotMovieDefaultTag
-    currentTvTag.value = props.hotTvDefaultTag
-    currentMovieTag.value = props.hotMovieDefaultTag
+    defaultTvTag.value = props.hotTvDefaultTag || '热门'
+    defaultMovieTag.value = props.hotMovieDefaultTag  || '热门'
+    currentTvTag.value = props.hotTvDefaultTag  || '热门'
+    currentMovieTag.value = props.hotMovieDefaultTag  || '热门'
     
     // 预请求电视剧数据
     const fetchDefaultTvData = async () => {
