@@ -1153,7 +1153,7 @@ const playNextEpisode = () => {
               'chevron-toggle-btn w-6 transition-all duration-300 flex items-center justify-center group relative overflow-hidden',
               isChevronButtonHovered ? 'h-40' : 'h-20'
             ]"
-            class="bg-white/30 dark:bg-gray-800/30 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-l-lg shadow-lg hover:bg-white dark:hover:bg-gray-800 hover:border-gray-200 dark:hover:border-gray-700"
+            class="bg-white/30 dark:bg-gray-800/30 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-l shadow-lg hover:bg-white dark:hover:bg-gray-800 hover:border-gray-200 dark:hover:border-gray-700"
           >
             <ChevronRightIcon class="h-5 w-5 text-gray-500 dark:text-gray-400 group-hover:text-primary-light transition-colors duration-200 z-10" />
           </button>
@@ -1168,7 +1168,7 @@ const playNextEpisode = () => {
               'chevron-toggle-btn w-6 transition-all duration-300 flex items-center justify-center group relative overflow-hidden',
               isChevronButtonHovered ? 'h-40' : 'h-20'
             ]"
-            class="bg-white/30 dark:bg-gray-800/30 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-l-lg shadow-lg hover:bg-white dark:hover:bg-gray-800 hover:border-gray-200 dark:hover:border-gray-700"
+            class="bg-white/30 dark:bg-gray-800/30 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-l shadow-lg hover:bg-white dark:hover:bg-gray-800 hover:border-gray-200 dark:hover:border-gray-700"
           >
           <ChevronLeftIcon class="h-5 w-5 text-gray-500 dark:text-gray-400 group-hover:text-primary-light transition-colors duration-200" />
           </button>
