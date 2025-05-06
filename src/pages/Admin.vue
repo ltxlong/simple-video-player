@@ -932,7 +932,7 @@ const handleImportConfig = async () => {
   <div v-if="isLoading" class="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
     <div class="text-center">
       <div class="w-12 h-12 border-4 border-primary-light dark:border-primary-dark border-t-transparent rounded-full animate-spin mb-4"></div>
-      <p class="text-text-light dark:text-text-dark">加载中...</p>
+      <p class="text-primary-light dark:text-primary-dark">加载中...</p>
     </div>
   </div>
   
