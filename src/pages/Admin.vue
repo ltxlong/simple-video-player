@@ -977,7 +977,7 @@ const handleImportConfig = async () => {
             class="h-10 w-10 flex items-center justify-center rounded-lg bg-background-light dark:bg-background-dark text-primary-light dark:text-primary-dark hover:bg-gray-100 dark:hover:bg-gray-800"
             title="返回首页"
           >
-            <el-icon class="text-xl"><VideoCamera /></el-icon>
+            <el-icon class="text-xl"><VideoPlay /></el-icon>
           </button>
           <h1 class="text-2xl font-bold">管理后台</h1>
         </div>
