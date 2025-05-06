@@ -1036,7 +1036,7 @@ const handleImportConfig = async () => {
                     <div class="truncate" :title="site.url">{{ site.url }}</div>
                   </div>
                   <div class="w-full sm:w-[30%] min-w-0 p-2 rounded bg-gray-50 dark:bg-gray-700/30">
-                    <div class="text-sm text-gray-500 dark:text-gray-400">搜索列表元素类名</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400">搜索结果列表类名</div>
                     <div class="truncate" :title="site.searchResultClass || '无'">{{ site.searchResultClass || '无' }}</div>
                   </div>
                   <div class="w-full sm:w-[30%] min-w-0 p-2 rounded bg-gray-50 dark:bg-gray-700/30">
