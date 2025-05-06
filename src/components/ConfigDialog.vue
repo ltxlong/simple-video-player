@@ -704,7 +704,7 @@ const handleCancel = () => {
                 :class="['space-y-2 p-4 border rounded-lg border-gray-200 dark:border-gray-700', `resource-site-item-${index}`]"
               >
                 <div class="flex items-center justify-between">
-                  <label class="text-sm text-gray-500 dark:text-gray-400">支持IPTV，IPTV只需配置URL和备注</label>
+                  <label class="text-sm text-gray-500 dark:text-gray-400">支持IPTV URL 和 JSON API<br>以上不能配置搜索结果列表类名</label>
                   <button
                     @click="handleRemoveSite(index)"
                     class="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
@@ -763,7 +763,7 @@ const handleCancel = () => {
                   <input
                     v-model="site.searchResultClass"
                     @input="(e: Event) => handleUpdateSite(index, 'searchResultClass', (e.target as HTMLInputElement).value)"
-                    placeholder="（URL是json api时为空）输入搜索结果列表元素类名"
+                    placeholder="输入搜索结果列表类名"
                     class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
                   />
                   <!-- 广告过滤配置 -->
