@@ -844,7 +844,7 @@ const handleCancel = () => {
               v-if="activeStatus.parseApi"
               v-model="localConfig.parseApi"
               @input="handleConfigUpdate"
-              placeholder="解析API地址，为空即是不使用解析"
+              placeholder="解析API地址，为空即不使用解析"
               class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
             />
           </div>
@@ -878,7 +878,7 @@ const handleCancel = () => {
               v-if="activeStatus.proxyVideoUrl"
               v-model="localConfig.proxyVideoUrl"
               @input="handleConfigUpdate"
-              placeholder="视频代理URL地址，为空即是不使用代理"
+              placeholder="视频代理URL地址，为空即不使用代理"
               class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
             />
           </div>
@@ -912,7 +912,7 @@ const handleCancel = () => {
               v-if="activeStatus.proxyLiveUrl"
               v-model="localConfig.proxyLiveUrl"
               @input="handleConfigUpdate"
-              placeholder="直播代理URL地址，为空即是不使用代理"
+              placeholder="直播代理URL地址，为空即不使用代理"
               class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
             />
           </div>
@@ -936,7 +936,7 @@ const handleCancel = () => {
               v-if="activeStatus.backgroundImage"
               v-model="localConfig.backgroundImage"
               @input="handleConfigUpdate"
-              placeholder="背景图片地址，为空即是不显示背景"
+              placeholder="背景图片地址，为空即不显示背景"
               class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
             />
           </div>
@@ -960,7 +960,7 @@ const handleCancel = () => {
               v-if="activeStatus.announcement"
               v-model="localConfig.announcement"
               @input="handleConfigUpdate"
-              placeholder="公告内容，为空即是不显示公告"
+              placeholder="公告内容，为空即不显示公告"
               class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
             />
           </div>
@@ -984,7 +984,7 @@ const handleCancel = () => {
               v-if="activeStatus.customTitle"
               v-model="localConfig.customTitle"
               @input="handleConfigUpdate"
-              placeholder="首页名称或图片链接，为空即是默认图标"
+              placeholder="首页名称或图片链接，为空即默认图标"
               class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
             />
           </div>
