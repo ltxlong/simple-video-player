@@ -679,6 +679,12 @@ const initPlayer = (url: string) => {
     // 检测视频类型
     const videoType = detectVideoType(url)
 
+    if ((url.endsWith('live=true') || url.endsWith('live%3Dtrue')) && props.proxyLiveUrl && !url.startsWith(props.proxyLiveUrl)) {
+      url = props.proxyLiveUrl + url
+    } else if (!url.endsWith('live=true') && !url.endsWith('live%3Dtrue') && props.proxyVideoUrl && !url.startsWith(props.proxyVideoUrl)) {
+      url = props.proxyVideoUrl + url
+    }
+
     theReqMainUrl.value = url
 
     // 创建新的播放器实例
