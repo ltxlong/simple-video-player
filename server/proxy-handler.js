@@ -83,11 +83,13 @@ export async function handleProxyRequest(req, res, isServerless = false) {
       // 对于域名，继续使用HTTP代理
       const headers = {
         'User-Agent': req.headers?.['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Referer': targetUrl.origin,
-        'Origin': targetUrl.origin,
       };
       if (req.headers?.range) {
         headers['Range'] = req.headers.range;
+      }
+      if (targetUrl.origin) {
+        headers['Referer'] = targetUrl.origin;
+        headers['Origin'] = targetUrl.origin;
       }
       const proxyRequest = new Request(targetUrl.toString(), {
         method: 'GET',
