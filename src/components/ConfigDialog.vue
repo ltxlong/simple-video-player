@@ -763,7 +763,7 @@ const handleCancel = () => {
                   <input
                     v-model="site.searchResultClass"
                     @input="(e: Event) => handleUpdateSite(index, 'searchResultClass', (e.target as HTMLInputElement).value)"
-                    placeholder="输入搜索结果列表元素类名（URL是json api时为空）"
+                    placeholder="（URL是json api时为空）输入搜索结果列表元素类名"
                     class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
                   />
                   <!-- 广告过滤配置 -->
