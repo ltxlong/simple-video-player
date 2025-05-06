@@ -264,7 +264,7 @@ const addResourceSite = async () => {
       <input
         id="siteSearchResultClass"
         class="w-full p-2 mb-3 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm"
-        placeholder="（URL是json api时为空）输入搜索结果列表元素类名"
+        placeholder="输入搜索结果列表类名（IPTV、api时为空）"
       />
       <div class="mb-3">
         <div class="flex items-center mb-2">
@@ -486,7 +486,7 @@ const editResourceSite = async (index: number) => {
       <input
         id="siteSearchResultClass"
         class="w-full p-2 mb-3 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm"
-        placeholder="（URL是json api时为空）输入搜索结果列表元素类名"
+        placeholder="输入搜索结果列表类名（IPTV、api时为空）"
         value="${site.searchResultClass || ''}"
       />
       <div class="mb-3">
