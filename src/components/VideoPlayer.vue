@@ -57,6 +57,152 @@ let isUrlChanging = false
 // 添加一个标志变量来标识是否是手动刷新
 let isManualRefresh = false
 
+// 添加滑动控制相关变量
+let touchStartX = 0
+let touchStartY = 0
+let initialVolume = 0
+let isHorizontalSwipe = false
+let isVerticalSwipe = false
+let currentTimeChange = 0
+let currentVolumeChange = 0
+let theTouchToast: HTMLElement | null = null
+
+// 创建自定义提示元素
+const createToast = () => {
+  const touchToast = document.createElement('div')
+  touchToast.id = 'video-control-toast'
+  touchToast.style.cssText = `
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 5px;
+    font-size: 16px;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+  `
+  playerContainer.value?.appendChild(touchToast)
+  return touchToast
+}
+
+// 显示提示
+const showToast = (text: string) => {
+  if (theTouchToast) {
+    theTouchToast.textContent = text
+    theTouchToast.style.opacity = '1'
+  }
+}
+
+// 隐藏提示
+const hideToast = () => {
+  if (theTouchToast) {
+    theTouchToast.style.opacity = '0'
+  }
+}
+
+// 触摸开始处理函数
+const handleTouchStart = (e: TouchEvent) => {
+  if (!player?.video) return
+  touchStartX = e.touches[0].clientX
+  touchStartY = e.touches[0].clientY
+  initialVolume = player.video.volume
+  isHorizontalSwipe = false
+  isVerticalSwipe = false
+  currentTimeChange = 0
+  currentVolumeChange = 0
+  hideToast()
+}
+
+// 触摸移动处理函数
+const handleTouchMove = (e: TouchEvent) => {
+  if (!player?.video || !touchStartX || !touchStartY) return
+
+  const touchX = e.touches[0].clientX
+  const touchY = e.touches[0].clientY
+  const deltaX = touchX - touchStartX
+  const deltaY = touchY - touchStartY
+
+  // 判断滑动方向
+  if (!isHorizontalSwipe && !isVerticalSwipe) {
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+      isHorizontalSwipe = true
+    } else {
+      isVerticalSwipe = true
+    }
+  }
+
+  // 水平滑动控制进度
+  if (isHorizontalSwipe) {
+    currentTimeChange = deltaX / 2 // 每像素改变0.5秒
+    showToast(`${currentTimeChange > 0 ? '快进' : '快退'} ${Math.abs(Math.round(currentTimeChange))}秒`)
+  }
+  // 垂直滑动控制音量
+  else if (isVerticalSwipe) {
+    currentVolumeChange = -deltaY / 200 // 每像素改变0.005音量
+    const newVolume = Math.max(0, Math.min(initialVolume + currentVolumeChange, 1))
+    showToast(`音量 ${Math.round(newVolume * 100)}%`)
+  }
+}
+
+// 触摸结束处理函数
+const handleTouchEnd = () => {
+  if (!player?.video) return
+  
+  // 应用最终变化
+  if (isHorizontalSwipe && currentTimeChange !== 0) {
+    const oldTime = player.video.currentTime
+    const newTime = Math.max(0, Math.min(oldTime + currentTimeChange, player.video.duration))
+    player.video.currentTime = newTime
+  } else if (isVerticalSwipe && currentVolumeChange !== 0) {
+    const newVolume = Math.max(0, Math.min(initialVolume + currentVolumeChange, 1))
+    player.video.volume = newVolume
+  }
+
+  // 重置状态
+  touchStartX = 0
+  touchStartY = 0
+  initialVolume = 0
+  isHorizontalSwipe = false
+  isVerticalSwipe = false
+  currentTimeChange = 0
+  currentVolumeChange = 0
+  hideToast()
+}
+
+// 添加移动端触摸控制
+const addMobileTouchControl = () => {
+  if (!player?.video) return
+  
+  // 创建提示元素
+  theTouchToast = createToast()
+  
+  // 添加事件监听
+  player.video.addEventListener('touchstart', handleTouchStart)
+  player.video.addEventListener('touchmove', handleTouchMove)
+  player.video.addEventListener('touchend', handleTouchEnd)
+}
+
+// 移除移动端触摸控制
+const removeMobileTouchControl = () => {
+  if (!player?.video) return
+  
+  // 移除事件监听
+  player.video.removeEventListener('touchstart', handleTouchStart)
+  player.video.removeEventListener('touchmove', handleTouchMove)
+  player.video.removeEventListener('touchend', handleTouchEnd)
+  
+  // 移除提示元素
+  if (theTouchToast) {
+    theTouchToast.remove()
+    theTouchToast = null
+  }
+}
+
 // 修改检查重试函数
 const checkAndRetry = () => {
   // 手动刷新或 URL 变化过程中不执行重试
@@ -336,125 +482,9 @@ const initStatusMonitor = () => {
   // 监听原生全屏
   // @ts-ignore
   player.on('fullscreen', () => {
-
     const isMobile = !!navigator.userAgent.match(/AppleWebKit.*Mobile.*/);
 
     if (isMobile) {
-      // 添加滑动控制相关变量
-      let touchStartX = 0
-      let touchStartY = 0
-      let initialVolume = 0
-      let isHorizontalSwipe = false
-      let isVerticalSwipe = false
-      let currentTimeChange = 0
-      let currentVolumeChange = 0
-
-      // 创建自定义提示元素
-      const createToast = () => {
-        const touchToast = document.createElement('div')
-        touchToast.id = 'video-control-toast'
-        touchToast.style.cssText = `
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          background-color: rgba(0, 0, 0, 0.7);
-          color: white;
-          padding: 10px 20px;
-          border-radius: 5px;
-          font-size: 16px;
-          z-index: 9999;
-          pointer-events: none;
-          opacity: 0;
-          transition: opacity 0.2s;
-        `
-        playerContainer.value?.appendChild(touchToast)
-        return touchToast
-      }
-
-      const theTouchToast = createToast()
-
-      // 显示提示
-      const showToast = (text: string) => {
-        theTouchToast.textContent = text
-        theTouchToast.style.opacity = '1'
-      }
-
-      // 隐藏提示
-      const hideToast = () => {
-        theTouchToast.style.opacity = '0'
-      }
-
-      // 触摸开始处理函数
-      const handleTouchStart = (e: TouchEvent) => {
-        touchStartX = e.touches[0].clientX
-        touchStartY = e.touches[0].clientY
-        initialVolume = player.video.volume
-        isHorizontalSwipe = false
-        isVerticalSwipe = false
-        currentTimeChange = 0
-        currentVolumeChange = 0
-        hideToast()
-      }
-
-      // 触摸移动处理函数
-      const handleTouchMove = (e: TouchEvent) => {
-        if (!touchStartX || !touchStartY) return
-
-        const touchX = e.touches[0].clientX
-        const touchY = e.touches[0].clientY
-        const deltaX = touchX - touchStartX
-        const deltaY = touchY - touchStartY
-
-        // 判断滑动方向
-        if (!isHorizontalSwipe && !isVerticalSwipe) {
-          if (Math.abs(deltaX) > Math.abs(deltaY)) {
-            isHorizontalSwipe = true
-          } else {
-            isVerticalSwipe = true
-          }
-        }
-
-        // 水平滑动控制进度
-        if (isHorizontalSwipe) {
-          currentTimeChange = deltaX / 2 // 每像素改变0.5秒
-          showToast(`${currentTimeChange > 0 ? '快进' : '快退'} ${Math.abs(Math.round(currentTimeChange))}秒`)
-        }
-        // 垂直滑动控制音量
-        else if (isVerticalSwipe) {
-          currentVolumeChange = -deltaY / 200 // 每像素改变0.005音量
-          const newVolume = Math.max(0, Math.min(initialVolume + currentVolumeChange, 1))
-          showToast(`音量 ${Math.round(newVolume * 100)}%`)
-        }
-      }
-
-      // 触摸结束处理函数
-      const handleTouchEnd = () => {
-        // 应用最终变化
-        if (isHorizontalSwipe && currentTimeChange !== 0) {
-          const oldTIme = player.video.currentTime
-          const newTime = Math.max(0, Math.min(oldTIme + currentTimeChange, player.video.duration))
-          player.video.currentTime = newTime
-        } else if (isVerticalSwipe && currentVolumeChange !== 0) {
-          const newVolume = Math.max(0, Math.min(initialVolume + currentVolumeChange, 1))
-          player.video.volume = newVolume
-        }
-
-        // 重置状态
-        touchStartX = 0
-        touchStartY = 0
-        isHorizontalSwipe = false
-        isVerticalSwipe = false
-        currentTimeChange = 0
-        currentVolumeChange = 0
-        hideToast()
-      }
-
-      // 添加事件监听
-      player.video.addEventListener('touchstart', handleTouchStart)
-      player.video.addEventListener('touchmove', handleTouchMove)
-      player.video.addEventListener('touchend', handleTouchEnd)
-      
       try {
         screen.orientation.lock('landscape').catch(err => {
           console.warn('无法锁定屏幕方向:', err.message);
@@ -463,29 +493,26 @@ const initStatusMonitor = () => {
       } catch (error) {
         console.warn('屏幕方向锁定不受支持:', error);
       }
+      
+      // 添加移动端触摸控制
+      addMobileTouchControl()
+    }
+  })
 
-      // 监听原生退出全屏
-      // @ts-ignore
-      player.on('fullscreen_cancel', () => {
+  // 监听原生退出全屏
+  // @ts-ignore
+  player.on('fullscreen_cancel', () => {
+    const isMobile = !!navigator.userAgent.match(/AppleWebKit.*Mobile.*/);
 
-        const isMobile = !!navigator.userAgent.match(/AppleWebKit.*Mobile.*/);
-
-        if (isMobile) {
-          // 移除事件监听
-          player.video.removeEventListener('touchstart', handleTouchStart)
-          player.video.removeEventListener('touchmove', handleTouchMove)
-          player.video.removeEventListener('touchend', handleTouchEnd)
-          
-          // 移除提示元素
-          theTouchToast.remove()
-          
-          try {
-            screen.orientation.unlock();
-          } catch (error) {
-            console.warn('解除屏幕方向锁定不受支持:', error);
-          }
-        }
-      })
+    if (isMobile) {
+      // 移除移动端触摸控制
+      removeMobileTouchControl()
+      
+      try {
+        screen.orientation.unlock();
+      } catch (error) {
+        console.warn('解除屏幕方向锁定不受支持:', error);
+      }
     }
   })
 }
