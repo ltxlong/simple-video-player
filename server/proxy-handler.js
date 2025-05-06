@@ -119,6 +119,11 @@ export async function handleProxyRequest(req, res, isServerless = false) {
         headers.set('Access-Control-Allow-Origin', '*');
         headers.set('Access-Control-Allow-Headers', '*');
         
+        // 如果是 m3u8?ts= 请求，设置 Content-Type
+        if (targetUrl.toString().includes('.m3u8?ts=')) {
+          headers.set('Content-Type', 'application/octet-stream');
+        }
+        
         return new Response(proxyResponse.body, {
           status: proxyResponse.status,
           statusText: proxyResponse.statusText,
@@ -137,6 +142,11 @@ export async function handleProxyRequest(req, res, isServerless = false) {
         // 确保CORS头存在
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Headers', '*');
+        
+        // 如果是 m3u8?ts= 请求，设置 Content-Type
+        if (targetUrl.toString().includes('.m3u8?ts=')) {
+          res.setHeader('Content-Type', 'application/octet-stream');
+        }
         
         // 设置状态码
         res.statusCode = proxyResponse.status;
