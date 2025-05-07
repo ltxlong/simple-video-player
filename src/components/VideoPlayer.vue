@@ -1917,11 +1917,6 @@ function customLoaderFactory() {
   overflow: hidden !important;
 }
 
-/* 在网页全屏模式下让视频区域占满宽度 */
-body.web-fullscreen .lg\:h-auto.relative {
-  width: 100% !important;
-}
-
 /* 在网页全屏模式下隐藏导航栏 */
 body.web-fullscreen nav {
   display: none !important;
@@ -1953,21 +1948,6 @@ body.web-fullscreen .video_player_container {
   margin: 0 !important;
   padding: 0 !important;
   z-index: 9999 !important;
-}
-
-.web-fullscreen .dplayer-video-wrap {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 100% !important;
-  height: 100% !important;
-}
-
-.web-fullscreen .dplayer-video-current {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: contain !important;
-  max-height: 100vh !important;
 }
 
 .dplayer-web-fullscreen-fix {
