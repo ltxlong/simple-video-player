@@ -3335,6 +3335,9 @@ const detectVideoType = (url: string): string => {
       return 'html'
     default:
       // 如果链接包含特定关键字
+      if (url.includes('?ac=videolist&wd=') || url.includes('?ac=detail&ids=')) {
+        return 'jsonApi'
+      }
       if (url.includes('$http') && url.includes('.m3u8')) {
         return 'm3u8str'
       }
@@ -3343,9 +3346,6 @@ const detectVideoType = (url: string): string => {
       }
       if (url.includes('.html') || url.includes('.com') || url.includes('.cn')) {
         return 'html'
-      }
-      if (url.includes('?ac=videolist&wd=') || url.includes('?ac=detail&ids=')) {
-        return 'jsonApi'
       }
 
       return 'auto'
