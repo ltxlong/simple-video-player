@@ -1948,6 +1948,23 @@ body.web-fullscreen .video_player_container {
   margin: 0 !important;
   padding: 0 !important;
   z-index: 9999 !important;
+  /* 添加以下属性确保完全撑满 */
+  min-width: 100vw !important;
+  min-height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  transform: none !important;
+  /* 确保视频容器也撑满 */
+  .dplayer-video-wrap {
+    width: 100% !important;
+    height: 100% !important;
+  }
+  /* 确保视频元素也撑满 */
+  .dplayer-video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+  }
 }
 
 .dplayer-web-fullscreen-fix {
