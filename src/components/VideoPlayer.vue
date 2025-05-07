@@ -28,6 +28,8 @@ const emit = defineEmits(['videoEnded', 'playNextEpisode', 'playPreviousEpisode'
 const playerContainer = ref<HTMLElement | null>(null)
 const iframeContainer = ref<HTMLIFrameElement | null>(null) 
 let player: DPlayer | null = null
+// 添加新的 playerRef 变量用于触摸事件
+const playerRef = ref<DPlayer | null>(null)
 let hls: Hls | null = null
 let flvPlayer: flvjs.Player | null = null  // 添加 FLV 播放器实例变量
 let retryCount = 0
@@ -69,6 +71,11 @@ let theTouchToast: HTMLElement | null = null
 
 // 创建自定义提示元素
 const createToast = () => {
+  // 如果已经存在 toast，先移除
+  if (theTouchToast) {
+    theTouchToast.remove()
+  }
+  
   const touchToast = document.createElement('div')
   touchToast.id = 'video-control-toast'
   touchToast.style.cssText = `
@@ -86,16 +93,20 @@ const createToast = () => {
     opacity: 0;
     transition: opacity 0.2s;
   `
-  playerContainer.value?.appendChild(touchToast)
+  // 将 toast 添加到播放器容器中
+  if (playerContainer.value) {
+    playerContainer.value.appendChild(touchToast)
+  }
   return touchToast
 }
 
 // 显示提示
 const showToast = (text: string) => {
-  if (theTouchToast) {
-    theTouchToast.textContent = text
-    theTouchToast.style.opacity = '1'
+  if (!theTouchToast) {
+    theTouchToast = createToast()
   }
+  theTouchToast.textContent = text
+  theTouchToast.style.opacity = '1'
 }
 
 // 隐藏提示
@@ -107,10 +118,21 @@ const hideToast = () => {
 
 // 触摸开始处理函数
 const handleTouchStart = (e: TouchEvent) => {
-  if (!player?.video) return
-  touchStartX = e.touches[0].clientX
-  touchStartY = e.touches[0].clientY
-  initialVolume = player.video.volume
+  if (!playerRef.value?.video || !playerContainer.value) return
+  
+  // 检查触摸点是否在播放器区域内
+  const playerRect = playerContainer.value.getBoundingClientRect()
+  const touchX = e.touches[0].clientX
+  const touchY = e.touches[0].clientY
+  
+  if (touchX < playerRect.left || touchX > playerRect.right ||
+      touchY < playerRect.top || touchY > playerRect.bottom) {
+    return
+  }
+  
+  touchStartX = touchX
+  touchStartY = touchY
+  initialVolume = playerRef.value.video.volume
   isHorizontalSwipe = false
   isVerticalSwipe = false
   currentTimeChange = 0
@@ -120,10 +142,18 @@ const handleTouchStart = (e: TouchEvent) => {
 
 // 触摸移动处理函数
 const handleTouchMove = (e: TouchEvent) => {
-  if (!player?.video || !touchStartX || !touchStartY) return
-
+  if (!playerRef.value?.video || !touchStartX || !touchStartY || !playerContainer.value) return
+  
+  // 检查触摸点是否在播放器区域内
+  const playerRect = playerContainer.value.getBoundingClientRect()
   const touchX = e.touches[0].clientX
   const touchY = e.touches[0].clientY
+  
+  if (touchX < playerRect.left || touchX > playerRect.right ||
+      touchY < playerRect.top || touchY > playerRect.bottom) {
+    return
+  }
+  
   const deltaX = touchX - touchStartX
   const deltaY = touchY - touchStartY
 
@@ -151,16 +181,16 @@ const handleTouchMove = (e: TouchEvent) => {
 
 // 触摸结束处理函数
 const handleTouchEnd = () => {
-  if (!player?.video) return
+  if (!playerRef.value?.video) return
   
   // 应用最终变化
   if (isHorizontalSwipe && currentTimeChange !== 0) {
-    const oldTime = player.video.currentTime
-    const newTime = Math.max(0, Math.min(oldTime + currentTimeChange, player.video.duration))
-    player.video.currentTime = newTime
+    const oldTime = playerRef.value.video.currentTime
+    const newTime = Math.max(0, Math.min(oldTime + currentTimeChange, playerRef.value.video.duration))
+    playerRef.value.video.currentTime = newTime
   } else if (isVerticalSwipe && currentVolumeChange !== 0) {
     const newVolume = Math.max(0, Math.min(initialVolume + currentVolumeChange, 1))
-    player.video.volume = newVolume
+    playerRef.value.video.volume = newVolume
   }
 
   // 重置状态
@@ -176,25 +206,27 @@ const handleTouchEnd = () => {
 
 // 添加移动端触摸控制
 const addMobileTouchControl = () => {
-  if (!player?.video) return
+  if (!playerRef.value?.video) return
   
-  // 创建提示元素
-  theTouchToast = createToast()
+  // 确保 toast 元素存在
+  if (!theTouchToast) {
+    theTouchToast = createToast()
+  }
   
-  // 添加事件监听
-  player.video.addEventListener('touchstart', handleTouchStart)
-  player.video.addEventListener('touchmove', handleTouchMove)
-  player.video.addEventListener('touchend', handleTouchEnd)
+  // 添加事件监听到 body
+  document.body.addEventListener('touchstart', handleTouchStart)
+  document.body.addEventListener('touchmove', handleTouchMove)
+  document.body.addEventListener('touchend', handleTouchEnd)
 }
 
 // 移除移动端触摸控制
 const removeMobileTouchControl = () => {
-  if (!player?.video) return
+  if (!playerRef.value?.video) return
   
-  // 移除事件监听
-  player.video.removeEventListener('touchstart', handleTouchStart)
-  player.video.removeEventListener('touchmove', handleTouchMove)
-  player.video.removeEventListener('touchend', handleTouchEnd)
+  // 移除 body 上的事件监听
+  document.body.removeEventListener('touchstart', handleTouchStart)
+  document.body.removeEventListener('touchmove', handleTouchMove)
+  document.body.removeEventListener('touchend', handleTouchEnd)
   
   // 移除提示元素
   if (theTouchToast) {
@@ -1140,15 +1172,25 @@ const initPlayer = (url: string) => {
 
     // 初始化完成后启动状态监控
     if (player) {
-      console.log('播放器初始化完成，启动状态监控')
-      initStatusMonitor()
-      
-      // 添加显示当前播放信息
-      updatePlayerTitle()
+      // 初始化完成后设置 playerRef
+      playerRef.value = player
 
-      // 如果视频类型不是 html，则添加 tabindex 和 click 事件，为了空格或点击暂停视频时，可以触发更新标签时间
-      if (player?.video && videoType !== 'html') {
-        player.video.setAttribute('tabindex', '0')
+    // 重新创建 toast
+    if (theTouchToast) {
+      theTouchToast.remove()
+      theTouchToast = null
+    }
+    theTouchToast = createToast()
+
+    console.log('播放器初始化完成，启动状态监控')
+    initStatusMonitor()
+    
+    // 添加显示当前播放信息
+    updatePlayerTitle()
+
+    // 如果视频类型不是 html，则添加 tabindex 和 click 事件，为了空格或点击暂停视频时，可以触发更新标签时间
+    if (player?.video && videoType !== 'html') {
+      player.video.setAttribute('tabindex', '0')
 
         player.video.addEventListener('click', () => {
           player.video.focus()
@@ -1232,6 +1274,9 @@ const resetPlayer = async () => {
   
   // 8. 等待一小段时间确保清理完成
   await new Promise(resolve => setTimeout(resolve, 100))
+
+  // 重置 playerRef
+  playerRef.value = null
 }
 
 // 显示/隐藏播放器工具栏的下一集图标
