@@ -1175,22 +1175,22 @@ const initPlayer = (url: string) => {
       // 初始化完成后设置 playerRef
       playerRef.value = player
 
-    // 重新创建 toast
-    if (theTouchToast) {
-      theTouchToast.remove()
-      theTouchToast = null
-    }
-    theTouchToast = createToast()
+      // 重新创建 toast
+      if (theTouchToast) {
+        theTouchToast.remove()
+        theTouchToast = null
+      }
+      theTouchToast = createToast()
 
-    console.log('播放器初始化完成，启动状态监控')
-    initStatusMonitor()
-    
-    // 添加显示当前播放信息
-    updatePlayerTitle()
+      console.log('播放器初始化完成，启动状态监控')
+      initStatusMonitor()
+      
+      // 添加显示当前播放信息
+      updatePlayerTitle()
 
-    // 如果视频类型不是 html，则添加 tabindex 和 click 事件，为了空格或点击暂停视频时，可以触发更新标签时间
-    if (player?.video && videoType !== 'html') {
-      player.video.setAttribute('tabindex', '0')
+      // 如果视频类型不是 html，则添加 tabindex 和 click 事件，为了空格或点击暂停视频时，可以触发更新标签时间
+      if (player?.video && videoType !== 'html') {
+        player.video.setAttribute('tabindex', '0')
 
         player.video.addEventListener('click', () => {
           player.video.focus()
