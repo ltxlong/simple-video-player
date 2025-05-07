@@ -494,8 +494,10 @@ const initStatusMonitor = () => {
         console.warn('屏幕方向锁定不受支持:', error);
       }
       
-      // 添加移动端触摸控制
-      addMobileTouchControl()
+      if (!props.url.endsWith('live=true') && !props.url.endsWith('live%3Dtrue')) {
+        // 添加移动端触摸控制
+        addMobileTouchControl()
+      }
     }
   })
 
@@ -505,8 +507,11 @@ const initStatusMonitor = () => {
     const isMobile = !!navigator.userAgent.match(/AppleWebKit.*Mobile.*/);
 
     if (isMobile) {
-      // 移除移动端触摸控制
-      removeMobileTouchControl()
+      
+      if (!props.url.endsWith('live=true') && !props.url.endsWith('live%3Dtrue')) {
+        // 移除移动端触摸控制
+        removeMobileTouchControl()
+      }
       
       try {
         screen.orientation.unlock();
