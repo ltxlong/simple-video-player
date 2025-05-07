@@ -1917,12 +1917,6 @@ function customLoaderFactory() {
   overflow: hidden !important;
 }
 
-/* 在网页全屏模式下隐藏分割线和右侧面板 */
-body.web-fullscreen .lg\:block.lg\:w-1,
-body.web-fullscreen .lg\:h-auto.p-4 {
-  display: none !important;
-}
-
 /* 在网页全屏模式下让视频区域占满宽度 */
 body.web-fullscreen .lg\:h-auto.relative {
   width: 100% !important;
