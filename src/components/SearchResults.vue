@@ -189,64 +189,145 @@ const handleIPTVResponseContent = async (site: ResourceSite, index: number, cont
     // 解析 txt 格式
     const lines = content.split('\n')
     
+    // 先用一个循环，判断是否有#EXTM3U
+    let hasExtm3u = false
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim()
+      if (line && line.includes('#EXTM3U')) {
+        hasExtm3u = true
+        break
+      } else if (line && line.includes('#genre#')) {
+        break
+      } else if (line && line.includes(',http') && lines[i + 1] && lines[i + 1].includes(',http') && !line.startsWith('#')) {
+        break
+      } else if (line && line.includes('，http') && lines[i + 1] && lines[i + 1].includes('，http') && !line.startsWith('#')) {
+        break
+      } else if (line && line.includes('$http') && lines[i + 1] && lines[i + 1].includes('$http') && !line.startsWith('#')) {
+        break
+      } else if (line && line.startsWith('http') && lines[i + 1] && lines[i + 1].startsWith('http') && !line.startsWith('#')) {
+        break
+      }
+    }
+
+    let currentTitle = ''
+    let lastGroupTitle = ''
+    let currentTvgName = ''
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim()
       if (!line) continue
       
-      // 检查是否是分组标记行
-      if (line.includes('#genre#')) {
-        const parts = line.split(/,#genre#|，#genre#/)
-        currentGroup = parts[0].trim() || '默认分组'
-        if (!groupedChannels[currentGroup]) {
-          groupedChannels[currentGroup] = []
-          // 如果是新分组，添加到顺序数组中
-          if (!groupOrder.includes(currentGroup)) {
-            groupOrder.unshift(currentGroup)
+      if (hasExtm3u) {
+        // 解析 m3u 格式
+        if (line.startsWith('#EXTINF:')) {
+          // 获取 tvg-name
+          const tvgNameMatch = line.match(/tvg-name="([^"]+)"/)
+          currentTvgName = tvgNameMatch ? tvgNameMatch[1].trim() : ''
+          
+          // 获取频道标题 (优先使用 tvg-name,如果没有则使用逗号后的标题)
+          const titleMatch = line.match(/,(.+)$/)
+          currentTitle = currentTvgName || (titleMatch ? titleMatch[1].trim() : `频道 ${Object.values(groupedChannels).flat().length + 1}`)
+          
+          // 尝试获取分组信息
+          const groupMatch = line.match(/group-title="([^"]+)"/)
+          if (groupMatch) {
+            currentGroup = groupMatch[1].trim()
+            lastGroupTitle = currentGroup
+            // 如果是新分组，添加到顺序数组中
+            if (!groupOrder.includes(currentGroup)) {
+              groupOrder.unshift(currentGroup)
+            }
+          } else {
+            // 如果没有组标题,使用上一个组标题或默认分组
+            currentGroup = lastGroupTitle || '默认分组'
+          }
+        } else if (line && !line.startsWith('#') && (line.includes('http://') || line.includes('https://'))) {
+          // 找到播放URL(必须是#EXTINF:的下一行)
+          if (currentTitle) {
+            if (!groupedChannels[currentGroup]) {
+              groupedChannels[currentGroup] = []
+            }
+            
+            groupedChannels[currentGroup].unshift({
+              title: currentTitle,
+              url: line
+            })
+            
+            // 重置当前标题和tvg-name,确保只处理#EXTINF:的下一行
+            currentTitle = ''
+            currentTvgName = ''
           }
         }
-        continue
-      }
-      
-      // 尝试解析不同格式
-      if ((line.includes(',') || line.includes('，')) && (line.includes('http://') || line.includes('https://'))) {
-        // 格式: "标题,URL" 或者 "标题，URL"
-        const parts = line.split(/,|，/)
-        const title = parts[0].trim()
-        const url = parts.slice(1).join(',').trim()
+
+      } else {
+        // 检查是否是分组标记行
+        if (line.includes('#genre#')) {
+          // 格式: "分组名,#genre#"
+          const parts = line.split(/,#genre#|，#genre#/)
+          currentGroup = parts[0].trim() || '默认分组'
+          if (!groupedChannels[currentGroup]) {
+            groupedChannels[currentGroup] = []
+            // 如果是新分组，添加到顺序数组中
+            if (!groupOrder.includes(currentGroup)) {
+              groupOrder.unshift(currentGroup)
+            }
+          }
+          continue
+        } else if (line.includes('$c_start') && line.includes('$c_end')) {
+          // 格式: "$c_start分组名$c_end"
+          const parts = line.split('$c_start')
+          currentGroup = parts[1].split('$c_end')[0].trim() || '默认分组'
+          if (!groupedChannels[currentGroup]) {
+            groupedChannels[currentGroup] = []
+            // 如果是新分组，添加到顺序数组中
+            if (!groupOrder.includes(currentGroup)) {
+              groupOrder.unshift(currentGroup)
+            }
+          }
+          continue
+        }
         
-        if (title && url) {
+        // 尝试解析不同格式
+        if ((line.includes(',') || line.includes('，')) && (line.includes('http://') || line.includes('https://'))) {
+          // 格式: "标题,URL" 或者 "标题，URL"
+          const parts = line.split(/,|，/)
+          let title = parts[0].trim()
+          let url = parts.slice(1).join(',').trim()
+          
+          if (title && url) {
+            if (!groupedChannels[currentGroup]) {
+              groupedChannels[currentGroup] = []
+            }
+            
+            groupedChannels[currentGroup].unshift({ title, url })
+          }
+        } else if (line.includes('$') && (line.includes('http://') || line.includes('https://'))) {
+          // 格式: "标题$URL"
+          const parts = line.split('$')
+          const title = parts[0].trim()
+          const url = parts.slice(1).join('$').trim()
+          
+          if (url) {
+            if (!groupedChannels[currentGroup]) {
+              groupedChannels[currentGroup] = []
+            }
+            
+            groupedChannels[currentGroup].unshift({ 
+              title: title || `频道 ${groupedChannels[currentGroup].length + 1}`, 
+              url 
+            })
+          }
+        } else if (line.match(/^https?:\/\//)) {
+          // 仅包含URL，使用递增的频道名称
           if (!groupedChannels[currentGroup]) {
             groupedChannels[currentGroup] = []
           }
           
-          groupedChannels[currentGroup].unshift({ title, url })
-        }
-      } else if (line.includes('$') && (line.includes('http://') || line.includes('https://'))) {
-        // 格式: "标题$URL"
-        const parts = line.split('$')
-        const title = parts[0].trim()
-        const url = parts.slice(1).join('$').trim()
-        
-        if (url) {
-          if (!groupedChannels[currentGroup]) {
-            groupedChannels[currentGroup] = []
-          }
-          
-          groupedChannels[currentGroup].unshift({ 
-            title: title || `频道 ${groupedChannels[currentGroup].length + 1}`, 
-            url 
+          groupedChannels[currentGroup].unshift({
+            title: `频道 ${groupedChannels[currentGroup].length + 1}`,
+            url: line
           })
         }
-      } else if (line.match(/^https?:\/\//)) {
-        // 仅包含URL，使用递增的频道名称
-        if (!groupedChannels[currentGroup]) {
-          groupedChannels[currentGroup] = []
-        }
-        
-        groupedChannels[currentGroup].unshift({
-          title: `频道 ${groupedChannels[currentGroup].length + 1}`,
-          url: line
-        })
       }
     }
   }
