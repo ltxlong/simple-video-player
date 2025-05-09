@@ -244,7 +244,7 @@ const validateResourceSites = () => {
       
       // 检查广告过滤的正则表达式是否为空
       if (site.adFilter && site.adFilter.status && 
-      site.adFilter.item === 'ad_name_regular_to_del_filter' && (
+      (site.adFilter.item === 'ad_name_regular_to_del_filter' || site.adFilter.item === 'ad_all_regular_to_del_filter') && (
       !site.adFilter.regularExpression || 
       site.adFilter.regularExpression.trim() === '')) {
         return {
@@ -253,7 +253,7 @@ const validateResourceSites = () => {
           index: i
         }
       } else if (site.adFilter && site.adFilter.status && 
-      site.adFilter.item === 'ad_name_regular_to_del_filter' && 
+      (site.adFilter.item === 'ad_name_regular_to_del_filter' || site.adFilter.item === 'ad_all_regular_to_del_filter') && 
       site.adFilter.regularExpression) {
         try {
           new RegExp(site.adFilter.regularExpression)
@@ -789,11 +789,12 @@ const handleCancel = () => {
                       <option value="default_del_ad_tag_to_filter">默认通用广告过滤（base）</option>
                       <option value="ad_tag_to_del_filter">根据标识删除过滤</option>
                       <option value="ad_name_len_to_del_filter">根据名称长度删除过滤</option>
-                      <option value="ad_name_regular_to_del_filter">自定义正则匹配删除过滤</option>
+                      <option value="ad_name_regular_to_del_filter">自定义正则匹配删除过滤（分片）</option>
+                      <option value="ad_all_regular_to_del_filter">自定义正则匹配删除过滤（全局）</option>
                     </select>
-                    <!-- 正则表达式输入框，仅在选择 ad_name_regular_to_del_filter 时显示 -->
+                    <!-- 正则表达式输入框，仅在选择 ad_name_regular_to_del_filter 或 ad_all_regular_to_del_filter 时显示 -->
                     <input
-                      v-if="site.adFilter && site.adFilter.item === 'ad_name_regular_to_del_filter'"
+                      v-if="site.adFilter && (site.adFilter.item === 'ad_name_regular_to_del_filter' || site.adFilter.item === 'ad_all_regular_to_del_filter')"
                       v-model="site.adFilter.regularExpression"
                       @input="(e: Event) => handleAdFilterUpdate(index, 'regularExpression', (e.target as HTMLInputElement).value)"
                       placeholder="输入正则表达式"
