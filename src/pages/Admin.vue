@@ -286,7 +286,8 @@ const addResourceSite = async () => {
           <option value="default_del_ad_tag_to_filter">默认通用广告过滤（base）</option>
           <option value="ad_tag_to_del_filter">根据标识删除过滤</option>
           <option value="ad_name_len_to_del_filter">根据名称长度删除过滤</option>
-          <option value="ad_name_regular_to_del_filter">自定义正则匹配删除过滤</option>
+          <option value="ad_name_regular_to_del_filter">自定义正则匹配删除过滤（分片）</option>
+          <option value="ad_all_regular_to_del_filter">自定义正则匹配删除过滤（全局）</option>
         </select>
         <div id="regularExpressionContainer" class="mt-2 hidden">
           <input
@@ -333,7 +334,7 @@ const addResourceSite = async () => {
       
       adFilterItem.addEventListener('change', () => {
         if (regularExpressionContainer) {
-          regularExpressionContainer.classList.toggle('hidden', adFilterItem.value !== 'ad_name_regular_to_del_filter')
+          regularExpressionContainer.classList.toggle('hidden', adFilterItem.value !== 'ad_name_regular_to_del_filter' && adFilterItem.value !== 'ad_all_regular_to_del_filter')
         }
       })
     },
@@ -368,10 +369,10 @@ const addResourceSite = async () => {
         }
       }
       
-      if (adFilterItem === 'ad_name_regular_to_del_filter' && !regularExpression) {
+      if ((adFilterItem === 'ad_name_regular_to_del_filter' || adFilterItem === 'ad_all_regular_to_del_filter') && !regularExpression) {
         Swal.showValidationMessage('请输入正则表达式')
         return false
-      } else if (adFilterItem === 'ad_name_regular_to_del_filter' && regularExpression) {
+      } else if ((adFilterItem === 'ad_name_regular_to_del_filter' || adFilterItem === 'ad_all_regular_to_del_filter') && regularExpression) {
         try {
           new RegExp(regularExpression)
         } catch(error) {
@@ -388,7 +389,7 @@ const addResourceSite = async () => {
         postData: isPost ? postData : undefined,
         adFilterStatus,
         adFilterItem,
-        regularExpression: adFilterItem === 'ad_name_regular_to_del_filter' ? regularExpression : undefined
+        regularExpression: (adFilterItem === 'ad_name_regular_to_del_filter' || adFilterItem === 'ad_all_regular_to_del_filter') ? regularExpression : undefined
       }
     }
   })
@@ -509,9 +510,10 @@ const editResourceSite = async (index: number) => {
           <option value="default_del_ad_tag_to_filter" ${adFilter.item === 'default_del_ad_tag_to_filter' ? 'selected' : ''}>默认通用广告过滤（base）</option>
           <option value="ad_tag_to_del_filter" ${adFilter.item === 'ad_tag_to_del_filter' ? 'selected' : ''}>根据标识删除过滤</option>
           <option value="ad_name_len_to_del_filter" ${adFilter.item === 'ad_name_len_to_del_filter' ? 'selected' : ''}>根据名称长度删除过滤</option>
-          <option value="ad_name_regular_to_del_filter" ${adFilter.item === 'ad_name_regular_to_del_filter' ? 'selected' : ''}>自定义正则匹配删除过滤</option>
+          <option value="ad_name_regular_to_del_filter" ${adFilter.item === 'ad_name_regular_to_del_filter' ? 'selected' : ''}>自定义正则匹配删除过滤（分片）</option>
+          <option value="ad_all_regular_to_del_filter" ${adFilter.item === 'ad_all_regular_to_del_filter' ? 'selected' : ''}>自定义正则匹配删除过滤（全局）</option>
         </select>
-        <div id="regularExpressionContainer" class="mt-2 ${adFilter.item === 'ad_name_regular_to_del_filter' ? '' : 'hidden'}">
+        <div id="regularExpressionContainer" class="mt-2 ${(adFilter.item === 'ad_name_regular_to_del_filter' || adFilter.item === 'ad_all_regular_to_del_filter') ? '' : 'hidden'}">
           <input
             id="regularExpression"
             class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm"
@@ -558,7 +560,7 @@ const editResourceSite = async (index: number) => {
       
       adFilterItem.addEventListener('change', () => {
         if (regularExpressionContainer) {
-          regularExpressionContainer.classList.toggle('hidden', adFilterItem.value !== 'ad_name_regular_to_del_filter')
+          regularExpressionContainer.classList.toggle('hidden', adFilterItem.value !== 'ad_name_regular_to_del_filter' && adFilterItem.value !== 'ad_all_regular_to_del_filter')
         }
       })
     },
@@ -593,10 +595,10 @@ const editResourceSite = async (index: number) => {
         }
       }
       
-      if (adFilterItem === 'ad_name_regular_to_del_filter' && !regularExpression) {
+      if ((adFilterItem === 'ad_name_regular_to_del_filter' || adFilterItem === 'ad_all_regular_to_del_filter') && !regularExpression) {
         Swal.showValidationMessage('请输入正则表达式')
         return false
-      } else if (adFilterItem === 'ad_name_regular_to_del_filter' && regularExpression) {
+      } else if ((adFilterItem === 'ad_name_regular_to_del_filter' || adFilterItem === 'ad_all_regular_to_del_filter') && regularExpression) {
         try {
           new RegExp(regularExpression)
         } catch(error) {
@@ -613,7 +615,7 @@ const editResourceSite = async (index: number) => {
         postData: isPost ? postData : undefined,
         adFilterStatus,
         adFilterItem,
-        regularExpression: adFilterItem === 'ad_name_regular_to_del_filter' ? regularExpression : ''
+        regularExpression: (adFilterItem === 'ad_name_regular_to_del_filter' || adFilterItem === 'ad_all_regular_to_del_filter') ? regularExpression : ''
       }
     }
   })
