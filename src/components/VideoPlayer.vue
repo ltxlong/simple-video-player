@@ -722,7 +722,10 @@ const updatePlayerTitle = () => {
                   adFilterType.value = '当前：根据名长删除广告'
                   break
                 case 'ad_name_regular_to_del_filter':
-                  adFilterType.value = '当前：正则匹配删除广告'
+                  adFilterType.value = '当前：分片正则删除广告'
+                  break
+                case 'ad_all_regular_to_del_filter':
+                  adFilterType.value = '当前：全局正则删除广告'
                   break
                 default:
                   adFilterType.value = '当前：默认通用广告过滤'
@@ -1518,17 +1521,27 @@ function customLoaderFactory() {
           callbacks.onSuccess = function(response: any, stats: any, context: any) {
             if (response.data) {
 
-              const originalContent = response.data
+              let originalContent = response.data
             
-              let lines = originalContent.split('\n')
-              let filteredLines = []
-              
               // 广告过滤信息
               const adFilter = props.currentVideoInfo?.adFilter || {
                                   status: true,
                                   item: 'default_del_ad_tag_to_filter',
                                   regularExpression: ''
                                 }
+
+              if (adFilter.status && adFilter.item === 'ad_all_regular_to_del_filter' && adFilter.regularExpression) {
+                // 全局正则匹配删除广告
+                try {
+                  const theRegex = new RegExp(adFilter.regularExpression, 'g');
+                  originalContent = originalContent.replace(theRegex, '');
+                } catch (error) {
+                  console.error('全局正则匹配删除广告时出错:', error)
+                }
+              }
+
+              let lines = originalContent.split('\n')
+              let filteredLines = []
               
               let the_final_ts_len = 0 // 最终长度过滤判断使用
               if (adFilter.status && adFilter.item === 'ad_name_len_to_del_filter') {
