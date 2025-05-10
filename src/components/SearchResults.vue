@@ -6,6 +6,7 @@ import type { CheerioAPI } from 'cheerio'
 import Swal from 'sweetalert2'
 import { useTheme } from '../composables/useTheme'
 import { BookmarkIcon } from '@heroicons/vue/24/outline'
+import { has } from 'node_modules/cheerio/dist/commonjs/api/traversing'
 
 interface Props {
   sites: ResourceSite[]
@@ -1295,9 +1296,9 @@ const processResults = async ($: CheerioAPI, searchUrl: string, site: ResourceSi
               let healthFilterFlag = false;
               if (props.enableHealthFilter) {
                 if (type) {
-                  healthFilterFlag = ['伦理片', '色情片', '同性片', '福利视频', '福利片', '福利', '里番', '里番动漫', '门事件', '萝莉', '萝莉少女', '制服诱惑', '国产传媒', 'cosplay', '黑丝诱惑', '中文字幕', '偷拍自拍', '无码影片', '无码', '日本无码', '有码', '日本有码', '素人', '网络主播'].includes(type);
+                  healthFilterFlag = ['伦理片', '色情片', '同性片', '福利视频', '福利片', '福利姬', '福利', '里番', '里番动漫', '门事件', '萝莉', '萝莉少女', '少女萝莉', '制服诱惑', '国产传媒', 'cosplay', '黑丝诱惑', '中文字幕', '自拍偷拍', '偷拍自拍', '无码影片', '无码', '无码专区', '日本无码', '有码', '日本有码', '素人', '网络主播'].includes(type);
                 } else if (title) {
-                  healthFilterFlag = title.includes('伦理片') || title.includes('色情片') || title.includes('同性片') || title.includes('福利视频') || title.includes('福利片') || title.includes('里番动漫') || title.includes('门事件') || title.includes('偷拍自拍') || title.includes('国产传媒') || title.includes('日本无码') || title.includes('日本有码');
+                  healthFilterFlag = title.includes('伦理片') || title.includes('色情片') || title.includes('同性片') || title.includes('福利视频') || title.includes('福利片') || title.includes('福利姬') || title.includes('里番动漫') || title.includes('门事件') || title.includes('自拍偷拍') || title.includes('偷拍自拍') || title.includes('国产传媒') || title.includes('日本无码') || title.includes('日本有码');
                 }
               }
 
@@ -1397,7 +1398,7 @@ const applyJsonApi = async (siteName: string, seriesName: string, jsonApiUrl: st
     // 健康过滤
     if (props.enableHealthFilter) {
       data.list = data.list.filter((item: any) => {
-        return !['伦理片', '色情片', '同性片', '福利视频', '福利片', '福利', '里番', '里番动漫', '门事件', '萝莉', '萝莉少女', '制服诱惑', '国产传媒', 'cosplay', '黑丝诱惑', '中文字幕', '偷拍自拍', '无码影片', '无码', '日本无码', '有码', '日本有码', '素人', '网络主播'].includes(item.type_name)
+        return !['伦理片', '色情片', '同性片', '福利视频', '福利片', '福利姬', '福利', '里番', '里番动漫', '门事件', '萝莉', '萝莉少女', '少女萝莉', '制服诱惑', '国产传媒', 'cosplay', '黑丝诱惑', '中文字幕', '自拍偷拍', '偷拍自拍', '无码影片', '无码', '无码专区', '日本无码', '有码', '日本有码', '素人', '网络主播'].includes(item.type_name)
       })
     }
 
@@ -1588,7 +1589,7 @@ const searchJsonApi = async (site: ResourceSite, index: number) => {
     // 健康过滤
     if (props.enableHealthFilter) {
       data.list = data.list.filter((item: any) => {
-        return !['伦理片', '色情片', '同性片', '福利视频', '福利片', '福利', '里番', '里番动漫', '门事件', '萝莉', '萝莉少女', '制服诱惑', '国产传媒', 'cosplay', '黑丝诱惑', '中文字幕', '偷拍自拍', '无码影片', '无码', '日本无码', '有码', '日本有码', '素人', '网络主播'].includes(item.type_name)
+        return !['伦理片', '色情片', '同性片', '福利视频', '福利片', '福利姬', '福利', '里番', '里番动漫', '门事件', '萝莉', '萝莉少女', '少女萝莉', '制服诱惑', '国产传媒', 'cosplay', '黑丝诱惑', '中文字幕', '自拍偷拍', '偷拍自拍', '无码影片', '无码', '无码专区', '日本无码', '有码', '日本有码', '素人', '网络主播'].includes(item.type_name)
       })
     }
     
