@@ -34,6 +34,27 @@ const route = useRoute()
 const { toggleTheme, isDark } = useTheme()
 const isMobile = !!navigator.userAgent.match(/AppleWebKit.*Mobile.*/)
 
+// 添加背景图片计算属性
+const randomBackgroundImage = computed(() => {
+  if (!config.value?.backgroundImage) return ''
+  
+  if (!config.value.backgroundImage.includes(',')) {
+    return config.value.backgroundImage.trim()
+  }
+
+  // 将逗号分隔的字符串转换为数组
+  const imageUrls = config.value.backgroundImage.split(',').map(url => url.trim()).filter(url => url)
+  
+  // 如果有多个URL，随机选择一个
+  if (imageUrls.length > 1) {
+    const randomIndex = Math.floor(Math.random() * imageUrls.length)
+    return imageUrls[randomIndex]
+  }
+  
+  // 如果只有一个URL，直接返回
+  return imageUrls[0] || ''
+})
+
 const videoUrl = ref('')
 const searchKeyword = ref('')
 const videoPlayer = ref<InstanceType<typeof VideoPlayer> | null>(null)
@@ -1005,10 +1026,10 @@ const playNextEpisode = () => {
             <div class="relative aspect-video mt-4">
               <!-- 背景图片容器 -->
               <div 
-                v-if="config?.backgroundImage"
+                v-if="randomBackgroundImage"
                 class="absolute inset-0 w-full h-full"
                 :style="{
-                  backgroundImage: `url(${config.backgroundImage})`,
+                  backgroundImage: `url(${randomBackgroundImage})`,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
                   backgroundRepeat: 'no-repeat'
