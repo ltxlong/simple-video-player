@@ -937,7 +937,7 @@ const handleCancel = () => {
               v-if="activeStatus.backgroundImage"
               v-model="localConfig.backgroundImage"
               @input="handleConfigUpdate"
-              placeholder="背景图片地址，为空即不显示背景"
+              placeholder="背景图片地址（多个用英文逗号隔开，随机显示），为空即不显示背景"
               class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
             />
           </div>
