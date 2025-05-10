@@ -6,7 +6,6 @@ import type { CheerioAPI } from 'cheerio'
 import Swal from 'sweetalert2'
 import { useTheme } from '../composables/useTheme'
 import { BookmarkIcon } from '@heroicons/vue/24/outline'
-import { has } from 'node_modules/cheerio/dist/commonjs/api/traversing'
 
 interface Props {
   sites: ResourceSite[]
