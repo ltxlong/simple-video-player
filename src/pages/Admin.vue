@@ -1229,7 +1229,7 @@ const handleImportConfig = async () => {
                 v-model="config.backgroundImage"
                 type="text"
                 class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-                placeholder="输入背景图片链接"
+                placeholder="输入图片链接（多个用英文逗号隔开，随机显示），为空即不显示背景"
               />
             </div>
 
