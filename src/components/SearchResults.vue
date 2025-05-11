@@ -1634,16 +1634,19 @@ const processJsonApiResults = async (data: any, index: number, reqBaseUrl: strin
   data.forEach((item: any) => {
     // 处理播放地址
     const vodPlayUrlArr = item.vod_play_url.split('$$$')
-    const m3u8Urls = vodPlayUrlArr.filter((vodPlayUrl: string) => {
-      return vodPlayUrl.includes('.m3u8')
-    })
+    let playUrls = vodPlayUrlArr
+    if (item.vod_play_url.includes('.m3u8')) {
+      playUrls = vodPlayUrlArr.filter((vodPlayUrl: string) => {
+        return vodPlayUrl.includes('.m3u8')
+      })
+    }
 
     // 生成卡片 HTML - 使用更小的固定宽度
     resultHtml += `
       <div class="result-item group ${isMobile ? 'w-[42vw]' : 'w-[10vw]'} flex-shrink-0 sm:flex-grow-0"
       >
         <div class="block bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg cursor-pointer shadow-sm hover:shadow-md dark:shadow-gray-900/10 border border-gray-100 dark:border-gray-700 transition-all duration-200 w-full h-[320px]"
-             data-url="${m3u8Urls[0]}"
+             data-url="${playUrls[0]}"
              data-vod-id="${item.vod_id}"
              data-type="json"
              data-title="${item.vod_name}"
@@ -1653,10 +1656,10 @@ const processJsonApiResults = async (data: any, index: number, reqBaseUrl: strin
             <!-- 封面图片容器 -->
             <div class="relative w-full h-[200px] flex-shrink-0 overflow-hidden rounded-t-lg">
               <img 
-                src="${item.vod_pic || ''}" 
+                src="${item.vod_pic || (item.vod_pic_thumb || (item.vod_pic_slide || ''))}" 
                 alt="${item.vod_name}"
                 class="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
-                onerror="this.onerror=null; this.src=''"
+                onerror="this.onerror=null; this.src='' "
               >
             </div>
             
@@ -2047,8 +2050,20 @@ const handleContainerClick = (event: MouseEvent) => {
       const type = clickedItem.getAttribute('data-type') || '' // 如果data-type为json，则是json api搜索结果的剧集
       const vodId = clickedItem.getAttribute('data-vod-id') || ''
 
-      // 检查是否是m3u8链接
-      if ((url.toLowerCase().includes('.m3u8') || isIPTVSource.value[activeTab.value]) && type !== 'json') {
+      // 检查是否是m3u8链接，兼容需要解析的剧集链接
+      if ((url.toLowerCase().includes('.m3u8') || isIPTVSource.value[activeTab.value] || 
+        url.includes('.qq.com') || 
+        url.includes('.iqiyi.com') || 
+        url.includes('.iq.com') || 
+        url.includes('.youku.com') || 
+        url.includes('.tudou.com') || 
+        url.includes('.bilibili.com') || 
+        url.includes('.mgtv.com') || 
+        url.includes('.sohu.com') || 
+        url.includes('.pptv.com') || 
+        url.includes('.le.com') || 
+        url.includes('.1905.com') || 
+        url.includes('.acfun.com')) && type !== 'json') {
         
         // 保存当前视频信息用于标签功能
         const title = clickedItem.querySelector('.text-center, .text-primary-light, .text-primary-dark, [class*="text-primary"], [class*="text-center"]')?.textContent?.trim() || ''
@@ -3319,9 +3334,6 @@ const handleSaveAsTag = () => {
   
   // 获取剧集集数
   let episodeNumber = contextMenu.value.episodeIndex || ''
-  
-  // 获取剧集URL
-  let episodeUrl = contextMenu.value.episodeUrl || ''
   
   // 获取当前标签信息
   const tagInfo = getTagInfo(currentSite, seriesName)
