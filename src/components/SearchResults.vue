@@ -1429,8 +1429,15 @@ const applyJsonApi = async (siteName: string, seriesName: string, jsonApiUrl: st
             <div class="m3u8-results flex flex-wrap gap-3">
         `
 
+    const theVodPlayUrl = data.list[0].vod_play_url
+    let playUrls = theVodPlayUrl.split('$$$')
+    if (theVodPlayUrl.includes('.m3u8')) {
+      playUrls = playUrls.filter((vodPlayUrl: string) => {
+        return vodPlayUrl.includes('.m3u8')
+      })
+    }
 
-    let links = data.list[0].vod_play_url.split('#').map(item => {
+    let links = playUrls[0].split('#').map((item: string) => {
       const itemArr = item.split('$')
       return {
         the_title: itemArr[0],
