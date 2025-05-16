@@ -826,7 +826,8 @@ const handleCancel = () => {
                 <div class="relative group ml-1">
                   <ExclamationCircleIcon class="h-5 w-5 text-amber-500 cursor-pointer" />
                   <div class="absolute left-0 top-5 whitespace-normal w-[calc(50vw-4rem)] max-w-md bg-gray-800 text-white text-sm py-2 px-3 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-[0_0_10px_rgba(59,130,246,0.5)]">
-                    解析是前端直接请求完成，不会对服务器产生额外的流量，不会解析资源站点的视频，只解析页面的
+                    解析是前端直接请求完成，不会对服务器产生额外的流量，不会解析资源站点的视频，只解析页面的<br><br>
+                    去除解析页面的弹窗广告请安装：<br>https://greasyfork.org/zh-CN/scripts/535880-jx-filter-ad
                   </div>
                 </div>
               </div>
