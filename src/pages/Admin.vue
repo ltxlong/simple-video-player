@@ -1075,7 +1075,7 @@ const handleImportConfig = async () => {
           </div>
           <div class="space-y-4">
             <div>
-              <label class="block mb-2">解析 API <br><span class="text-xs text-gray-500 dark:text-gray-400">( 是前端直接请求完成，不会对服务器产生额外的流量，不会解析资源站点的视频，只解析页面的 )</span></label>
+              <label class="block mb-2">解析 API <br><span class="text-xs text-gray-500 dark:text-gray-400">( 是前端直接请求完成，不会对服务器产生额外的流量，不会解析资源站点的视频，只解析页面的 )</span><br><span class="text-xs text-gray-500 dark:text-gray-400">( 去除解析页面的弹窗广告请安装 https://greasyfork.org/zh-CN/scripts/535880-jx-filter-ad )</span></label>
               <input
                 v-model="config.parseApi"
                 type="text"
