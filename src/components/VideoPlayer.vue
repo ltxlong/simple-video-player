@@ -528,7 +528,7 @@ const initStatusMonitor = () => {
       
       if (!props.url.endsWith('live=true') && !props.url.endsWith('live%3Dtrue')) {
         // 添加移动端触摸控制
-        addMobileTouchControl()
+        //addMobileTouchControl()
       }
     }
   })
@@ -542,7 +542,7 @@ const initStatusMonitor = () => {
       
       if (!props.url.endsWith('live=true') && !props.url.endsWith('live%3Dtrue')) {
         // 移除移动端触摸控制
-        removeMobileTouchControl()
+        //removeMobileTouchControl()
       }
       
       try {
