@@ -3355,7 +3355,7 @@ const handleSaveAsTag = () => {
 
   const the_detail_page_url_type = detectVideoType(detailPageUrl) || ''
 
-  if (the_detail_page_url_type === 'm3u8str' && contextMenu.value.vodId) {
+  if ((the_detail_page_url_type === 'm3u8str' || (the_detail_page_url_type === 'html' && detailPageUrl.includes('$'))) && contextMenu.value.vodId) {
     detailPageUrl = contextMenu.value.vodUrl.replace('?ac=videolist&wd=', '?ac=detail&ids=' + contextMenu.value.vodId)
   }
   
