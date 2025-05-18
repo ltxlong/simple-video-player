@@ -704,7 +704,7 @@ const handleCancel = () => {
                 :class="['space-y-2 p-4 border rounded-lg border-gray-200 dark:border-gray-700', `resource-site-item-${index}`]"
               >
                 <div class="flex items-center justify-between">
-                  <label class="text-sm text-gray-500 dark:text-gray-400">支持IPTV URL 和 JSON API<br>以上不能配置搜索结果列表类名</label>
+                  <label class="text-sm text-gray-500 dark:text-gray-400">支持IPTV URL<br>支持 MacCMS10 JSON API<br>MacCMS10 使用?ac=videolist&wd=<br>以上不能配置搜索结果列表类名</label>
                   <button
                     @click="handleRemoveSite(index)"
                     class="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
