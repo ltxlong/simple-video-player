@@ -1099,7 +1099,7 @@ const playNextEpisode = () => {
           <!-- 分隔线 -->
           <div
             v-if="!isMobile"
-            class="absolute left-0 top-0 bottom-0 w-1 -mx-[2px] bg-gray-200 dark:bg-gray-700 hover:bg-primary-light dark:hover:bg-primary-dark z-10 cursor-col-resize transition-opacity duration-300"
+            class="absolute left-0 top-0 bottom-0 hover:w-1 w-0 -mx-0 bg-gray-200 dark:bg-gray-700 hover:bg-primary-light dark:hover:bg-primary-dark z-10 cursor-col-resize transition-opacity duration-300"
             :class="{ 'opacity-0': isRightPanelHidden }"
             @mousedown="handleDragStart"
             @touchstart="handleDragStart"
