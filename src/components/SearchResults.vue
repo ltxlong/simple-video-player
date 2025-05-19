@@ -390,7 +390,7 @@ const handleIPTVResponseContent = async (site: ResourceSite, index: number, cont
             <div class="p-3 text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-primary-light dark:group-hover:text-primary-dark break-words" title="${title}">
               ${title}
             </div>
-            <div class="absolute inset-0 rounded ring-1 ring-inset ring-gray-200 dark:ring-gray-700 group-hover:ring-primary-light/20 dark:group-hover:ring-primary-dark/20"></div>
+            <div class="absolute inset-0 rounded ring-1 ring-inset ring-gray-200 dark:ring-0 dark:ring-gray-700 group-hover:ring-primary-light/20 dark:group-hover:ring-primary-dark/20"></div>
           </div>
         `
       })
@@ -1480,9 +1480,9 @@ const applyJsonApi = async (siteName: string, seriesName: string, jsonApiUrl: st
           <div class="px-3 py-3 text-sm font-medium ${isCurrentVideo ? 'text-primary-light dark:text-primary-dark' : 'text-gray-700 dark:text-gray-200'} text-center group-hover:text-primary-light dark:group-hover:text-primary-dark line-clamp-2 break-words" title="${the_title}">
             ${the_title}
           </div>
-          <div class="absolute inset-0 rounded ring-1 ring-inset ring-gray-200 dark:ring-gray-700 group-hover:ring-primary-light/20 dark:group-hover:ring-primary-dark/20"></div>
+          <div class="absolute inset-0 rounded ring-1 ring-inset ring-gray-200 dark:ring-0 dark:ring-gray-700 group-hover:ring-primary-light/20 dark:group-hover:ring-primary-dark/20"></div>
           <div class="absolute inset-0 rounded bg-primary-light dark:bg-primary-dark ${isCurrentVideo ? 'opacity-10' : 'opacity-0'} group-hover:opacity-10 transition-opacity duration-200 bg-active"></div>
-          <div class="absolute inset-0 rounded ring-2 ring-primary-light dark:ring-primary-dark ring-offset-2 ring-offset-white dark:ring-offset-gray-800 ${isCurrentVideo ? 'opacity-100' : 'opacity-0'} group-hover:opacity-100 transition-opacity duration-200 ring-active"></div>
+          <div class="absolute inset-0 rounded ring-1 ring-primary-light dark:ring-primary-dark ring-offset-2 ring-offset-white dark:ring-offset-gray-800 ${isCurrentVideo ? 'opacity-100' : 'opacity-0'} group-hover:opacity-100 transition-opacity duration-200 ring-active"></div>
         </div>
       `
     })
@@ -1991,9 +1991,9 @@ const handleResultClick = async (url: string, title?: string, type?: string, vod
           <div class="px-3 py-3 text-sm font-medium ${isCurrentVideo ? 'text-primary-light dark:text-primary-dark' : 'text-gray-700 dark:text-gray-200'} text-center group-hover:text-primary-light dark:group-hover:text-primary-dark line-clamp-2 break-words" title="${the_title}">
             ${the_title}
           </div>
-          <div class="absolute inset-0 rounded ring-1 ring-inset ring-gray-200 dark:ring-gray-700 group-hover:ring-primary-light/20 dark:group-hover:ring-primary-dark/20"></div>
+          <div class="absolute inset-0 rounded ring-1 ring-inset ring-gray-200 dark:ring-0 dark:ring-gray-700 group-hover:ring-primary-light/20 dark:group-hover:ring-primary-dark/20"></div>
           <div class="absolute inset-0 rounded bg-primary-light dark:bg-primary-dark ${isCurrentVideo ? 'opacity-10' : 'opacity-0'} group-hover:opacity-10 transition-opacity duration-200 bg-active"></div>
-          <div class="absolute inset-0 rounded ring-2 ring-primary-light dark:ring-primary-dark ring-offset-2 ring-offset-white dark:ring-offset-gray-800 ${isCurrentVideo ? 'opacity-100' : 'opacity-0'} group-hover:opacity-100 transition-opacity duration-200 ring-active"></div>
+          <div class="absolute inset-0 rounded ring-1 ring-primary-light dark:ring-primary-dark ring-offset-2 ring-offset-white dark:ring-offset-gray-800 ${isCurrentVideo ? 'opacity-100' : 'opacity-0'} group-hover:opacity-100 transition-opacity duration-200 ring-active"></div>
         </div>
       `
     })
@@ -2758,9 +2758,9 @@ const applyTag = (key: string) => {
                 <div class="px-3 py-3 text-sm font-medium ${isCurrentVideo ? 'text-primary-light dark:text-primary-dark' : 'text-gray-700 dark:text-gray-200'} text-center group-hover:text-primary-light dark:group-hover:text-primary-dark line-clamp-2 break-words" title="${title}">
                   ${title}
                 </div>
-                <div class="absolute inset-0 rounded ring-1 ring-inset ring-gray-200 dark:ring-gray-700 group-hover:ring-primary-light/20 dark:group-hover:ring-primary-dark/20"></div>
+                <div class="absolute inset-0 rounded ring-1 ring-inset ring-gray-200 dark:ring-0 dark:ring-gray-700 group-hover:ring-primary-light/20 dark:group-hover:ring-primary-dark/20"></div>
                 <div class="absolute inset-0 rounded bg-primary-light dark:bg-primary-dark ${isCurrentVideo ? 'opacity-10' : 'opacity-0'} group-hover:opacity-10 transition-opacity duration-200 bg-active"></div>
-                <div class="absolute inset-0 rounded ring-2 ring-primary-light dark:ring-primary-dark ring-offset-2 ring-offset-white dark:ring-offset-gray-800 ${isCurrentVideo ? 'opacity-100' : 'opacity-0'} group-hover:opacity-100 transition-opacity duration-200 ring-active"></div>
+                <div class="absolute inset-0 rounded ring-1 ring-primary-light dark:ring-primary-dark ring-offset-2 ring-offset-white dark:ring-offset-gray-800 ${isCurrentVideo ? 'opacity-100' : 'opacity-0'} group-hover:opacity-100 transition-opacity duration-200 ring-active"></div>
               </div>
             `
           })
@@ -2812,9 +2812,9 @@ const applyTag = (key: string) => {
                 <div class="p-3 text-sm font-medium text-primary-light dark:text-primary-dark text-center group-hover:text-primary-light dark:group-hover:text-primary-dark line-clamp-2 break-words" title="${tag.episodeNumber || '未知集数'}">
                   ${tag.episodeNumber || '未知集数'}
                 </div>
-                <div class="absolute inset-0 rounded ring-1 ring-inset ring-gray-200 dark:ring-gray-700 group-hover:ring-primary-light/20 dark:group-hover:ring-primary-dark/20"></div>
+                <div class="absolute inset-0 rounded ring-1 ring-inset ring-gray-200 dark:ring-0 dark:ring-gray-700 group-hover:ring-primary-light/20 dark:group-hover:ring-primary-dark/20"></div>
                 <div class="absolute inset-0 rounded bg-primary-light dark:bg-primary-dark opacity-10 group-hover:opacity-10 transition-opacity duration-200 bg-active"></div>
-                <div class="absolute inset-0 rounded ring-2 ring-primary-light dark:ring-primary-dark ring-offset-2 ring-offset-white dark:ring-offset-gray-800 opacity-100 group-hover:opacity-100 transition-opacity duration-200 ring-active"></div>
+                <div class="absolute inset-0 rounded ring-1 ring-primary-light dark:ring-primary-dark ring-offset-2 ring-offset-white dark:ring-offset-gray-800 opacity-100 group-hover:opacity-100 transition-opacity duration-200 ring-active"></div>
               </div>
             </div>
           </div>
@@ -3912,10 +3912,10 @@ iframe {
 .tag-save-btn::before {
   content: '';
   position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  bottom: -1px;
   border-radius: 0.25rem;
   border: 0 solid #5b99fc;
   transition: all 0.1s ease;
@@ -3923,7 +3923,7 @@ iframe {
 }
 
 .tag-save-btn:hover::before {
-  border-width: 2px;
+  border-width: 1px;
 }
 
 /* 移除之前的悬停样式 */
