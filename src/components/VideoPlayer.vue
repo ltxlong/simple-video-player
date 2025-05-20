@@ -68,7 +68,7 @@ const checkAndRetry = () => {
     return false
   }
 
-  if (retryCount >= MAX_RETRY_COUNT) {
+  if (retryCount >= MAX_RETRY_COUNT - 1) {
     console.error('已达到最大重试次数，停止重试')
     
     // 如果配置了代理URL，那么不开启，否则开启代理模式
@@ -179,13 +179,6 @@ const initStatusMonitor = () => {
   // @ts-ignore
   player.on('error', () => {
     if (!checkAndRetry()) return
-    
-    // 延迟一段时间后重试
-    setTimeout(() => {
-      console.log('尝试重新初始化播放器final...')
-      initPlayer(props.url)
-    }, 1000)
-
   })
 
   // 添加视频结束事件监听，用于自动连播
@@ -503,10 +496,6 @@ const updatePlayerTitle = () => {
 
           // 构建显示文本：站点名称 - 剧集标题 - 剧集名称
           let displayText = '';
-
-          if (props.autoPlayNext) {
-            displayText = '连播 - '
-          }
           
           if (siteRemark) {
             displayText += siteRemark;
@@ -545,7 +534,7 @@ const updatePlayerTitle = () => {
               }
             } else {
               if (displayText) displayText += ' - ';
-              displayText += '已关闭广告过滤'
+              displayText += '没过滤'
               adFilterType.value = '当前：已关闭广告过滤'
             }
           } else {
@@ -1475,6 +1464,9 @@ function customLoaderFactory() {
                       context_url = context_url.replace(props.proxyVideoUrl, '')
                     }
                     const originalUrl = decodeURIComponent(context_url)
+                    if (originalUrl.startsWith('/api/proxy?url=')) {
+                      originalUrl.replace('/api/proxy?url=', '')
+                    }
                     const urlObj = new URL(originalUrl)
 
                     // 处理嵌套 m3u8 路径
@@ -1537,7 +1529,7 @@ function customLoaderFactory() {
                       // 使用本地服务器代理
                       // 确保URL格式正确（防止双重编码）
                       let proxyTsUrl = encodeURIComponent(tsUrl)
-                      let finalUrl = `/api/proxy?url=${proxyTsUrl}`
+                      let finalUrl = window.location.origin + `/api/proxy?url=${proxyTsUrl}`
                       
                       // 特殊情况处理
                       if (line.includes('.m3u8?ts=')) {
@@ -1545,7 +1537,7 @@ function customLoaderFactory() {
                         const tsProxyUrl_0 = tpProxyUrl_split_arr[0]
                         const tsProxyUrl_1 = tpProxyUrl_split_arr[1]
                         proxyTsUrl = encodeURIComponent(tsProxyUrl_0 + '_the_proxy_ts_url_' + tsProxyUrl_1)
-                        finalUrl = `/api/proxy?url=${proxyTsUrl}`
+                        finalUrl = window.location.origin + `/api/proxy?url=${proxyTsUrl}`
                       }
                       
                       filteredLines.push(finalUrl)
@@ -1624,7 +1616,7 @@ function customLoaderFactory() {
                           // 使用本地服务器代理
                           // 确保URL格式正确（防止双重编码）
                           let the_proxyUrl = encodeURIComponent(the_uri)
-                          let finalUrl = `/api/proxy?url=${the_proxyUrl}`
+                          let finalUrl = window.location.origin + `/api/proxy?url=${the_proxyUrl}`
                           
                           // 特殊情况处理
                           if (originalUri.includes('.m3u8?ts=')) {
@@ -1632,7 +1624,7 @@ function customLoaderFactory() {
                             const tsProxyUrl_0 = tpProxyUrl_split_arr[0]
                             const tsProxyUrl_1 = tpProxyUrl_split_arr[1]
                             the_proxyUrl = encodeURIComponent(tsProxyUrl_0 + '_the_proxy_ts_url_' + tsProxyUrl_1)
-                            finalUrl = `/api/proxy?url=${the_proxyUrl}`
+                            finalUrl = window.location.origin + `/api/proxy?url=${the_proxyUrl}`
                           }
                           
                           line = line.replace(originalUri, finalUrl); // 替换 URI 的值
