@@ -136,6 +136,8 @@ export async function handleProxyRequest(req, res, isServerless = false) {
         // 复制响应头
         const filteredHeaders = filterPlatformHeaders(proxyResponse.headers);
         for (const [key, value] of filteredHeaders.entries()) {
+          // 跳过 content-length 和 transfer-encoding，避免冲突
+          if (key.toLowerCase() === 'content-length' || key.toLowerCase() === 'transfer-encoding') continue;
           res.setHeader(key, value);
         }
         
@@ -143,17 +145,44 @@ export async function handleProxyRequest(req, res, isServerless = false) {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Headers', '*');
         
-        // 如果是 m3u8?ts= 请求，设置 Content-Type
-        if (targetUrl.toString().includes('.m3u8?ts=')) {
-          res.setHeader('Content-Type', 'application/octet-stream');
-        }
-        
         // 设置状态码
         res.statusCode = proxyResponse.status;
+
+        // 如果是 m3u8?ts= 请求，设置 Content-Type 并用流式转发
+        if (targetUrl.toString().includes('.m3u8?ts=')) {
+          res.setHeader('Content-Type', 'application/octet-stream');
+          // 用流式转发，避免 content-length/transfer-encoding 冲突
+          if (proxyResponse.body && typeof proxyResponse.body.pipe === 'function') {
+            proxyResponse.body.pipe(res);
+          } else {
+            // 兼容没有 pipe 方法的情况
+            const responseBody = await proxyResponse.arrayBuffer();
+            res.end(Buffer.from(responseBody));
+          }
+          return;
+        }
         
-        // 获取响应体并发送
-        const responseBody = await proxyResponse.arrayBuffer();
-        res.end(Buffer.from(responseBody));
+        // 其它类型根据 content-type 判断如何返回
+        const contentType = proxyResponse.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const resJson = await proxyResponse.json();
+          res.send(resJson);
+        } else if (
+          contentType.includes('application/vnd.apple.mpegurl') ||
+          contentType.includes('application/x-mpegURL') ||
+          contentType.includes('mpegurl') ||
+          contentType.includes('m3u8') ||
+          targetUrl.toString().endsWith('.m3u8')
+        ) {
+          // m3u8文本
+          const resText = await proxyResponse.text();
+          
+          res.send(resText);
+        } else {
+          // 其它类型，按二进制返回
+          const resBuffer = await proxyResponse.arrayBuffer();
+          res.end(Buffer.from(resBuffer));
+        }
       } catch (error) {
         console.error('发送响应时出错:', error);
         if (!res.headersSent) {
