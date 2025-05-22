@@ -1119,16 +1119,16 @@ const handleOnlineImport = async () => {
                 导入
               </button>
               <button
-                @click="handleOnlineImport"
-                class="px-4 py-2 bg-green-600 text-white rounded hover:opacity-90"
-              >
-                在线导入
-              </button>
-              <button
                 @click="addResourceSite"
                 class="px-4 py-2 bg-primary-light dark:bg-primary-dark text-white rounded hover:opacity-90"
               >
                 添加
+              </button>
+              <button
+                @click="handleOnlineImport"
+                class="px-4 py-2 bg-green-600 text-white rounded hover:opacity-90"
+              >
+                在线导入
               </button>
             </div>
           </div>
