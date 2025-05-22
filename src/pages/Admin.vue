@@ -951,6 +951,8 @@ const handleOnlineImport = async () => {
     confirmButtonText: '导入',
     cancelButtonText: '取消',
     confirmButtonColor: '#3B82F6',
+    background: isDark.value ? '#1F2937' : '#FFFFFF',
+    color: isDark.value ? '#FFFFFF' : '#000000',
     inputValidator: (value) => {
       if (!value) {
         return '请输入有效的URL！';
