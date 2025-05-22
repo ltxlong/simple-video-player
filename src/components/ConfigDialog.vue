@@ -1,110 +1,145 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
-import type { Config } from '../types'
-import { XMarkIcon, ExclamationCircleIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CloudArrowUpIcon, Cog6ToothIcon } from '@heroicons/vue/24/outline'
+import { ref, onMounted} from 'vue'
+import { useTheme } from '../composables/useTheme'
 import Swal from 'sweetalert2'
+import type { Config } from '../types'
 import { useRouter } from 'vue-router'
-
-const props = defineProps<{
-  modelValue: boolean
-  config: Config
-}>()
-
-const emit = defineEmits<{
-  (e: 'update:modelValue', value: boolean): void
-  (e: 'update:config', value: { localConfig: Config, activeStatus: Record<string, boolean>, isMasterSwitch: boolean }): void
-}>()
+import { getAdminConfig, decodeBase64 } from '../api/config'
 
 const router = useRouter()
+const { toggleTheme, isDark } = useTheme()
 
-const localConfig = ref<Config>({ ...props.config })
-const tempConfig = ref<Config>({ ...props.config })
-// 添加总开关状态
-const masterSwitch = ref(false)
-// 添加激活状态对象
-const activeStatus = ref({
-  resourceSites: false,
-  parseApi: false,
-  backgroundImage: false,
-  announcement: false,
-  customTitle: false,
-  proxyVideoUrl: false,
-  proxyLiveUrl: false,
-  autoPlayNext: false,
-  enableHotMovies: false
+const config = ref<Config>({
+  resourceSites: [],
+  parseApi: '',
+  backgroundImage: '',
+  enableLogin: false,
+  loginPassword: '',
+  announcement: '',
+  customTitle: '',
+  enableHealthFilter: true,
+  proxyVideoUrl: '',
+  proxyLiveUrl: '',
+  enableHotMovies: false,
+  hotMoviesProxyUrl: '',
+  hotTvDefaultTag: '',
+  hotMovieDefaultTag: '',
+  autoPlayNext: false
 })
 
-// 添加监听props.modelValue变化的watch
-watch(() => props.modelValue, (newVal) => {
-  // 当弹窗打开时重新加载配置
-  if (newVal) {
-    loadConfigFromStorage()
-  }
-})
+const isDialogOpen = ref(false)
+const isLoading = ref(true)
+const showPassword = ref(false)
+const isAuthenticated = ref(false)
+const adminPassword = ref('')
+const loginError = ref('')
 
-// 从localStorage加载配置
-const loadConfigFromStorage = () => {
-  const storedConfig = localStorage.getItem('frontendConfig')
-  if (storedConfig) {
-    try {
-      const parsedConfig = JSON.parse(storedConfig)
-      localConfig.value = { ...props.config, ...parsedConfig }
-      tempConfig.value = { ...localConfig.value }
-      
-      // 加载激活状态
-      const storedActiveStatus = localStorage.getItem('frontendConfigActiveStatus')
-      if (storedActiveStatus) {
-        activeStatus.value = { ...activeStatus.value, ...JSON.parse(storedActiveStatus) }
-      } else {
-        // 初始化激活状态
-        initActiveStatus()
-      }
-      
-      // 加载总开关状态
-      const storedMasterSwitch = localStorage.getItem('frontendConfigMasterSwitch')
-      if (storedMasterSwitch !== null) {
-        masterSwitch.value = JSON.parse(storedMasterSwitch)
-      }
-    } catch (error) {
-      console.error('解析存储的配置失败:', error)
-    }
-  } else {
-    // 初始化激活状态
-    initActiveStatus()
-  }
-}
+// 用于显示和编辑的明文密码
+const plainPassword = ref('')
 
-// 初始化激活状态
-const initActiveStatus = () => {
-  activeStatus.value = {
-    resourceSites: !!localConfig.value.resourceSites?.length,
-    parseApi: !!localConfig.value.parseApi,
-    backgroundImage: !!localConfig.value.backgroundImage,
-    announcement: !!localConfig.value.announcement,
-    customTitle: !!localConfig.value.customTitle,
-    proxyVideoUrl: !!localConfig.value.proxyVideoUrl,
-    proxyLiveUrl: !!localConfig.value.proxyLiveUrl,
-    autoPlayNext: !!localConfig.value.autoPlayNext,
-    enableHotMovies: !!localConfig.value.enableHotMovies
-  }
-}
-
-// 保存配置到localStorage
-const saveConfigToStorage = (config: Config) => {
+// 加载配置
+const loadConfig = async () => {
   try {
-    // 确保enableHotMovies和autoPlayNext的值与activeStatus中的值一致
-    config.enableHotMovies = activeStatus.value.enableHotMovies
-    config.autoPlayNext = activeStatus.value.autoPlayNext
-    localStorage.setItem('frontendConfig', JSON.stringify(config))
-    localStorage.setItem('frontendConfigActiveStatus', JSON.stringify(activeStatus.value))
-    localStorage.setItem('frontendConfigMasterSwitch', JSON.stringify(masterSwitch.value))
+    const configData = await getAdminConfig()
+    config.value = configData
+    
+    // 如果没有健康过滤设置，默认为开启
+    if (config.value.enableHealthFilter === undefined) {
+      config.value.enableHealthFilter = true
+    }
+    
+    // 如果有密码，解密后存储到 plainPassword
+    if (config.value.loginPassword) {
+      try {
+        plainPassword.value = decodeBase64(config.value.loginPassword)
+      } catch {
+        plainPassword.value = config.value.loginPassword
+      }
+    } else {
+      plainPassword.value = ''
+    }
   } catch (error) {
-    console.error('保存配置到localStorage失败:', error)
+    console.error('加载配置失败:', error)
+    // 如果是401或403错误，清除登录状态
+    if (error instanceof Error && (error.message.includes('401') || error.message.includes('403'))) {
+      sessionStorage.removeItem('adminToken')
+      isAuthenticated.value = false
+    }
   }
 }
 
-onMounted(() => {
-  loadConfigFromStorage()
+// 检查登录状态
+const checkAuthStatus = () => {
+  const token = sessionStorage.getItem('adminToken')
+  if (token) {
+    isAuthenticated.value = true
+    return true
+  }
+  return false
+}
+
+// 检查管理员密码
+const handleAdminLogin = async () => {
+  const password = adminPassword.value?.trim() || ''
+  if (!password) {
+    loginError.value = '请输入密码'
+    return
+  }
+
+  try {
+    // 验证密码
+    const response = await fetch('/api/auth/verify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({ 
+        password: password,
+        isAdmin: true
+      })
+    })
+
+    const data = await response.json()
+    
+    if (!response.ok) {
+      loginError.value = data.error || '登录失败'
+      return
+    }
+    
+    // 保存 token 到 sessionStorage
+    if (data.token) {
+      sessionStorage.setItem('adminToken', data.token)
+      isAuthenticated.value = true
+      loginError.value = ''
+      
+      // 登录成功后加载配置
+      await loadConfig()
+    } else {
+      throw new Error('服务器未返回token')
+    }
+  } catch (error) {
+    console.error('登录失败:', error)
+    loginError.value = '登录失败，请重试'
+  }
+}
+
+const handlePasswordInput = () => {
+  loginError.value = ''
+}
+
+// 初始化加载配置
+onMounted(async () => {
+  try {
+    // 先检查登录状态
+    if (checkAuthStatus()) {
+      isAuthenticated.value = true
+      // 已登录才加载配置
+      await loadConfig()
+    }
+  } finally {
+    isLoading.value = false
+  }
 })
 
 interface ResourceSite {
@@ -121,448 +156,790 @@ interface ResourceSite {
   }
 }
 
-// 计算属性用于控制弹窗显示
-const showDialog = computed({
-  get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value)
-})
-
-// 处理配置更新
-const handleConfigUpdate = () => {
-  tempConfig.value = { ...localConfig.value }
-}
-
-// 处理资源站点操作
-const handleAddSite = () => {
-  if (!localConfig.value.resourceSites) {
-    localConfig.value.resourceSites = []
-  }
-  localConfig.value.resourceSites.push({
-    url: '',
-    searchResultClass: '',
-    remark: '',
-    active: true,
-    isPost: false,
-    postData: '',
-    adFilter: {
-      status: true,
-      item: 'default_del_ad_tag_to_filter',
-      regularExpression: ''
+const deleteResourceSite = async (index: number) => {
+  isDialogOpen.value = true
+  const site = config.value.resourceSites[index]
+  const siteInfo = site.remark ? ` "${site.remark}" ` : ''
+  
+  const result = await Swal.fire({
+    title: '确认删除',
+    html: `确定要删除这个${siteInfo}资源站点吗？<br><br>此操作无法撤销。`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: '确认删除',
+    cancelButtonText: '取消',
+    confirmButtonColor: '#EF4444',
+    cancelButtonColor: '#6B7280',
+    background: isDark.value ? '#1F2937' : '#FFFFFF',
+    color: isDark.value ? '#FFFFFF' : '#000000',
+    customClass: {
+      title: 'text-xl font-medium',
+      popup: 'swal2-popup',
+      htmlContainer: '!mb-20',
+      actions: '!block',
+      confirmButton: '!absolute !right-6 !bottom-6 !shadow-none !ring-0',
+      cancelButton: '!absolute !left-6 !bottom-6 !shadow-none'
+    },
+    buttonsStyling: true,
+    showClass: {
+      backdrop: 'swal2-noanimation',
+      popup: 'swal2-noanimation'
+    },
+    hideClass: {
+      popup: ''
     }
   })
-  handleConfigUpdate()
-}
 
-const handleRemoveSite = (index: number) => {
-  if (localConfig.value.resourceSites) {
-    localConfig.value.resourceSites.splice(index, 1)
-    handleConfigUpdate()
-  }
-}
+  isDialogOpen.value = false
 
-const handleUpdateSite = (index: number, field: string, value: string | boolean) => {
-  if (localConfig.value.resourceSites) {
-    localConfig.value.resourceSites[index] = {
-      ...localConfig.value.resourceSites[index],
-      [field]: value
-    }
-    handleConfigUpdate()
-  }
-}
-
-// 处理总开关状态变化
-const handleMasterSwitchToggle = () => {
-  masterSwitch.value = !masterSwitch.value
-}
-
-// 修改开关状态变化处理
-const handleToggle = (key: keyof Config) => {
-  if (key === 'enableLogin' || key === 'enableHealthFilter' || key === 'enableHotMovies' || key === 'autoPlayNext') {
-    // 对于这些直接在Config中的布尔属性，直接更新localConfig和activeStatus
-    localConfig.value[key] = !localConfig.value[key]
-    if (key === 'enableHotMovies') {
-      activeStatus.value.enableHotMovies = !activeStatus.value.enableHotMovies
-    } else if (key === 'autoPlayNext') {
-      activeStatus.value.autoPlayNext = !activeStatus.value.autoPlayNext
-    }
-  } else if (key === 'resourceSites') {
-    activeStatus.value.resourceSites = !activeStatus.value.resourceSites
-  } else if (key in activeStatus.value) {
-    // @ts-ignore: 动态属性访问
-    activeStatus.value[key] = !activeStatus.value[key]
-  }
-  handleConfigUpdate()
-}
-
-// 添加参数模板函数
-const applyPostDataTemplate = (index: number) => {
-  if (localConfig.value.resourceSites && localConfig.value.resourceSites[index]) {
-    const templateData = {
-      '搜索参数key': '{search_value}',
-      '其他参数key': '其他参数value'
-    }
-    localConfig.value.resourceSites[index].postData = JSON.stringify(templateData, null, 4)
-    handleConfigUpdate()
-  }
-}
-
-// 处理站点开关状态变化
-const handleSiteToggle = (index: number, field: string, value: boolean) => {
-  if (localConfig.value.resourceSites) {
-    localConfig.value.resourceSites[index] = {
-      ...localConfig.value.resourceSites[index],
-      [field]: value
-    }
-    handleConfigUpdate()
-  }
-}
-
-// 处理站点广告过滤选项更新
-const handleAdFilterUpdate = (index: number, field: string, value: any) => {
-  if (localConfig.value.resourceSites) {
-    if (!localConfig.value.resourceSites[index].adFilter) {
-      localConfig.value.resourceSites[index].adFilter = {
-        status: true,
-        item: 'default_del_ad_tag_to_filter',
-        regularExpression: ''
-      }
-    }
-    
-    localConfig.value.resourceSites[index].adFilter = {
-      ...localConfig.value.resourceSites[index].adFilter,
-      [field]: value
-    }
-    
-    handleConfigUpdate()
-  }
-}
-
-// 添加验证资源站点配置的函数
-const validateResourceSites = () => {
-  if (!localConfig.value.resourceSites || !Array.isArray(localConfig.value.resourceSites)) {
-    return { valid: true } // 没有资源站点配置，不需要验证
-  }
-
-  for (let i = 0; i < localConfig.value.resourceSites.length; i++) {
-    const site = localConfig.value.resourceSites[i]
-    // 只验证激活状态的站点
-    if (site.active) {
-      // 检查URL是否为空
-      if (!site.url || site.url.trim() === '') {
-        return {
-          valid: false,
-          message: `站点 #${i+1} URL不能为空`,
-          index: i
-        }
-      }
-      
-      // 检查广告过滤的正则表达式是否为空
-      if (site.adFilter && site.adFilter.status && 
-      (site.adFilter.item === 'ad_name_regular_to_del_filter' || site.adFilter.item === 'ad_all_regular_to_del_filter') && (
-      !site.adFilter.regularExpression || 
-      site.adFilter.regularExpression.trim() === '')) {
-        return {
-          valid: false,
-          message: `站点 #${i+1} 广告过滤的正则表达式不能为空`,
-          index: i
-        }
-      } else if (site.adFilter && site.adFilter.status && 
-      (site.adFilter.item === 'ad_name_regular_to_del_filter' || site.adFilter.item === 'ad_all_regular_to_del_filter') && 
-      site.adFilter.regularExpression) {
-        try {
-          new RegExp(site.adFilter.regularExpression)
-        } catch (error) {
-          return {
-            valid: false,
-            message: `站点 #${i+1} 广告过滤的正则表达式格式不正确`,
-            index: i
-          }
-        }
-      }
-
-      // 检查remark是否为空
-      if (!site.remark || site.remark.trim() === '') {
-        return {
-          valid: false,
-          message: `站点 #${i+1} 备注不能为空`,
-          index: i
-        }
-      }
-      
-      // 检查POST参数格式
-      if (site.isPost && site.postData) {
-        try {
-          JSON.parse(site.postData)
-        } catch (e) {
-          return {
-            valid: false,
-            message: `站点 #${i+1} POST参数格式无效，必须是有效的JSON`,
-            index: i
-          }
-        }
-      }
-    }
-  }
-  
-  return { valid: true }
-}
-
-// 处理错误状态
-const errorMessage = ref('')
-
-// 处理确定
-const handleConfirm = () => {
-  // 如果总开关关闭，则使用默认配置
-  if (!masterSwitch.value) {
-    emit('update:config', { localConfig: props.config, activeStatus: activeStatus.value, isMasterSwitch: false })
-    saveConfigToStorage(localConfig.value)
-    showDialog.value = false
-    return
-  }
-  
-  // 如果资源站点配置开关打开，验证资源站点配置
-  if (activeStatus.value.resourceSites) {
-    const validationResult = validateResourceSites()
-    if (!validationResult.valid) {
-      errorMessage.value = validationResult.message || '资源站点配置无效'
-      // 滚动到对应的站点配置位置
-      if (validationResult.index !== undefined) {
-        nextTick(() => {
-          const siteElement = document.querySelector(`.resource-site-item-${validationResult.index}`)
-          if (siteElement) {
-            siteElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          }
-        })
-      }
-      return
-    }
-  }
-  
-  // 清除错误信息
-  errorMessage.value = ''
-  
-  // 创建一个基于默认配置的新配置对象
-  const finalConfig = { ...props.config } as any;
-  
-  // 针对每个配置项检查：总开关开启 + 对应配置开关开启 + 配置值不为空
-  
-  // 资源站点配置
-  if (activeStatus.value.resourceSites && localConfig.value.resourceSites?.length) {
-    finalConfig.resourceSites = localConfig.value.resourceSites.filter(site => site.active && typeof site.url === 'string' && site.url.trim() !== '');
-  }
-  
-  // 解析API配置
-  if (activeStatus.value.parseApi && typeof localConfig.value.parseApi === 'string' && localConfig.value.parseApi.trim() !== '') {
-    finalConfig.parseApi = localConfig.value.parseApi;
-  }
-  
-  // 视频代理URL配置
-  if (activeStatus.value.proxyVideoUrl && typeof localConfig.value.proxyVideoUrl === 'string') {
-    finalConfig.proxyVideoUrl = localConfig.value.proxyVideoUrl;
-  }
-  
-  // 直播代理URL配置
-  if (activeStatus.value.proxyLiveUrl && typeof localConfig.value.proxyLiveUrl === 'string') {
-    finalConfig.proxyLiveUrl = localConfig.value.proxyLiveUrl;
-  }
-  
-  // 背景图片配置
-  if (activeStatus.value.backgroundImage && typeof localConfig.value.backgroundImage === 'string') {
-    finalConfig.backgroundImage = localConfig.value.backgroundImage;
-  }
-  
-  // 公告配置
-  if (activeStatus.value.announcement && typeof localConfig.value.announcement === 'string') {
-    finalConfig.announcement = localConfig.value.announcement;
-  }
-  
-  // 首页名称配置
-  if (activeStatus.value.customTitle && typeof localConfig.value.customTitle === 'string') {
-    finalConfig.customTitle = localConfig.value.customTitle;
-  }
-  
-  // 豆瓣热门配置
-  finalConfig.enableHotMovies = activeStatus.value.enableHotMovies;
-  if (localConfig.value.hotMoviesProxyUrl && typeof localConfig.value.hotMoviesProxyUrl === 'string') {
-    finalConfig.hotMoviesProxyUrl = localConfig.value.hotMoviesProxyUrl;
-  }
-  if (localConfig.value.hotTvDefaultTag && typeof localConfig.value.hotTvDefaultTag === 'string') {
-    finalConfig.hotTvDefaultTag = localConfig.value.hotTvDefaultTag;
-  }
-  if (localConfig.value.hotMovieDefaultTag && typeof localConfig.value.hotMovieDefaultTag === 'string') {
-    finalConfig.hotMovieDefaultTag = localConfig.value.hotMovieDefaultTag;
-  }
-  
-  emit('update:config', { localConfig: finalConfig, activeStatus: activeStatus.value, isMasterSwitch: true })
-  saveConfigToStorage(localConfig.value)
-  showDialog.value = false
-}
-
-// 导出资源站点配置
-const exportSiteConfig = () => {
-  try {
-    // 检查是否有数据
-    if (!localConfig.value.resourceSites || localConfig.value.resourceSites.length === 0) {
-      Swal.fire({
-        toast: true,
-        position: 'top',
-        icon: 'info',
-        title: '没有资源站点数据可导出',
-        showConfirmButton: false,
-        timer: 2000
-      })
-      return
-    }
-    
-    // 直接导出资源站点数组
-    const jsonStr = JSON.stringify(localConfig.value.resourceSites, null, 2)
-    
-    // 创建Blob对象
-    const blob = new Blob([jsonStr], { type: 'application/json' })
-    
-    // 创建下载链接
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'video_harvest_site_config.json'
-    
-    // 触发下载
-    document.body.appendChild(a)
-    a.click()
-    
-    // 清理
-    URL.revokeObjectURL(url)
-    document.body.removeChild(a)
-    
-    // 导出成功提示
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title: '导出成功',
-      showConfirmButton: false,
-      timer: 2000
-    })
-  } catch (error) {
-    console.error('导出配置失败:', error)
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'error',
-      title: '导出配置失败',
-      showConfirmButton: false,
-      timer: 2000
-    })
-  }
-}
-
-// 导入资源站点配置
-const importSiteConfig = async (event: Event) => {
-  const input = event.target as HTMLInputElement
-  const file = input?.files?.[0]
-  
-  if (!file) return
-
-  // 限制文件大小为 1MB
-  const maxSizeInBytes = 1 * 1024 * 1024;
-  if (file.size > maxSizeInBytes) {
+  if (result.isConfirmed) {
+    config.value.resourceSites.splice(index, 1)
     await Swal.fire({
+      title: '删除成功',
+      icon: 'success',
       toast: true,
-      position: 'top',
-      icon: 'error',
-      title: '请上传小于 1MB 的文件。',
+      position: 'top-end',
       showConfirmButton: false,
-      timer: 2000
-    });
-    
-    input.value = ''
-    return;
-  }
-  
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    try {
-      const content = e.target?.result as string
-      const importedConfig = JSON.parse(content)
-      
-      // 验证导入的数据是否有效
-      if (Array.isArray(importedConfig)) {
-        // 确保 resourceSites 已初始化
-        if (!Array.isArray(localConfig.value.resourceSites)) {
-          localConfig.value.resourceSites = []
-        }
-        
-        // 对导入的站点进行去重处理
-        let addedCount = 0
-        const existingUrls = new Set(localConfig.value.resourceSites.map(site => site.url))
-        
-        importedConfig.forEach(site => {
-          // 如果该站点URL不在现有配置中，则添加它
-          if (site.url && !existingUrls.has(site.url)) {
-            localConfig.value.resourceSites.push(site)
-            existingUrls.add(site.url)
-            addedCount++
-          }
-        })
-        
-        handleConfigUpdate()
-        
-        // 根据导入结果显示不同提示
-        if (addedCount > 0) {
-          Swal.fire({
-            toast: true,
-            position: 'top',
-            icon: 'success',
-            title: `导入成功，新增${addedCount}个站点`,
-            showConfirmButton: false,
-            timer: 2000
-          })
-        } else {
-          Swal.fire({
-            toast: true,
-            position: 'top',
-            icon: 'info',
-            title: '所有站点已存在，未添加新站点',
-            showConfirmButton: false,
-            timer: 2000
-          })
-        }
-      } else {
-        throw new Error('无效的配置文件')
+      timer: 2000,
+      timerProgressBar: true,
+      background: isDark.value ? '#1F2937' : '#FFFFFF',
+      color: isDark.value ? '#FFFFFF' : '#000000',
+      customClass: {
+        timerProgressBar: '!bg-primary-light/50 dark:!bg-primary-dark/50'
+      },
+      didOpen: (toast) => {
+        toast.addEventListener('mouseenter', Swal.stopTimer)
+        toast.addEventListener('mouseleave', Swal.resumeTimer)
       }
-    } catch (error) {
-      console.error('导入配置失败:', error)
-      Swal.fire({
+    })
+  }
+}
+
+const addResourceSite = async () => {
+  isDialogOpen.value = true
+  const result = await Swal.fire({
+    title: '添加资源站点',
+    titleText: '添加资源站点',
+    customClass: {
+      title: 'text-xl font-medium',
+      popup: 'swal2-popup',
+      htmlContainer: '!mb-20',
+      validationMessage: '!absolute !bottom-20 !left-6 !right-6 !m-0 !p-0 text-red-500 text-sm',
+      actions: '!block',
+      confirmButton: '!absolute !right-6 !bottom-6 !shadow-none !ring-0',
+      cancelButton: '!absolute !left-6 !bottom-6 !shadow-none'
+    },
+    html: `
+      <input
+        id="siteUrl"
+        class="w-full p-2 mb-3 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm"
+        placeholder="输入资源站点搜索URL（如：https://test.com/search?keyword=）"
+      />
+      <div class="flex items-center mb-3">
+        <label class="flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            id="isPost"
+            class="sr-only peer"
+          />
+          <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-light dark:peer-checked:bg-primary-dark"></div>
+          <span class="ms-3 text-sm font-medium text-gray-900 dark:text-gray-300">使用POST请求</span>
+        </label>
+        <a 
+          href="javascript:void(0)" 
+          class="ml-4 text-sm text-primary-light dark:text-primary-dark hover:underline"
+          onclick="document.getElementById('postData').value = JSON.stringify({'搜索参数key':'{search_value}','其他参数key':'其他参数value'}, null, 4)"
+        >
+          参数模板
+        </a>
+      </div>
+      <div id="postDataContainer" class="hidden mb-3">
+        <textarea
+          id="postData"
+          class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm max-h-[150px] min-h-[50px] overflow-y-auto"
+          placeholder="输入POST请求参数（JSON格式）"
+          rows="4"
+        ></textarea>
+      </div>
+      <input
+        id="siteSearchResultClass"
+        class="w-full p-2 mb-3 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm"
+        placeholder="输入搜索结果列表类名（IPTV、api时为空）"
+      />
+      <div class="mb-3">
+        <div class="flex items-center mb-2">
+          <label class="flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              id="adFilterStatus"
+              class="sr-only peer"
+              checked
+            />
+            <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-light dark:peer-checked:bg-primary-dark"></div>
+            <span class="ms-3 text-sm font-medium text-gray-900 dark:text-gray-300">启用广告过滤</span>
+          </label>
+        </div>
+        <select 
+          id="adFilterItem" 
+          class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm"
+        >
+          <option value="default_del_ad_tag_to_filter">默认通用广告过滤（base）</option>
+          <option value="ad_tag_to_del_filter">根据标识删除过滤</option>
+          <option value="ad_name_len_to_del_filter">根据名称长度删除过滤</option>
+          <option value="ad_name_regular_to_del_filter">自定义正则匹配删除过滤（分片）</option>
+          <option value="ad_all_regular_to_del_filter">自定义正则匹配删除过滤（全局）</option>
+        </select>
+        <div id="regularExpressionContainer" class="mt-2 hidden">
+          <input
+            id="regularExpression"
+            class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm"
+            placeholder="输入正则表达式"
+          />
+        </div>
+      </div>
+      <input
+        id="siteRemark"
+        class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm"
+        placeholder="输入备注"
+      />
+    `,
+    showCancelButton: true,
+    confirmButtonText: '添加',
+    cancelButtonText: '取消',
+    confirmButtonColor: '#3B82F6',
+    cancelButtonColor: '#6B7280',
+    background: isDark.value ? '#1F2937' : '#FFFFFF',
+    color: isDark.value ? '#FFFFFF' : '#000000',
+    buttonsStyling: true,
+    showClass: {
+      backdrop: 'swal2-noanimation',
+      popup: 'swal2-noanimation'
+    },
+    hideClass: {
+      popup: ''
+    },
+    didOpen: () => {
+      const isPostCheckbox = document.getElementById('isPost') as HTMLInputElement
+      const postDataContainer = document.getElementById('postDataContainer')
+      
+      isPostCheckbox.addEventListener('change', () => {
+        if (postDataContainer) {
+          postDataContainer.classList.toggle('hidden', !isPostCheckbox.checked)
+        }
+      })
+      
+      // 添加广告过滤相关的事件监听
+      const adFilterItem = document.getElementById('adFilterItem') as HTMLSelectElement
+      const regularExpressionContainer = document.getElementById('regularExpressionContainer')
+      
+      adFilterItem.addEventListener('change', () => {
+        if (regularExpressionContainer) {
+          regularExpressionContainer.classList.toggle('hidden', adFilterItem.value !== 'ad_name_regular_to_del_filter' && adFilterItem.value !== 'ad_all_regular_to_del_filter')
+        }
+      })
+    },
+    preConfirm: () => {
+      const url = (document.getElementById('siteUrl') as HTMLInputElement).value.trim()
+      const searchResultClass = (document.getElementById('siteSearchResultClass') as HTMLInputElement).value.trim()
+      const remark = (document.getElementById('siteRemark') as HTMLInputElement).value.trim()
+      const isPost = (document.getElementById('isPost') as HTMLInputElement).checked
+      const postData = (document.getElementById('postData') as HTMLTextAreaElement).value.trim()
+      
+      // 获取广告过滤相关的值
+      const adFilterStatus = (document.getElementById('adFilterStatus') as HTMLInputElement).checked
+      const adFilterItem = (document.getElementById('adFilterItem') as HTMLSelectElement).value
+      const regularExpression = (document.getElementById('regularExpression') as HTMLInputElement).value.trim()
+
+      if (!url) {
+        Swal.showValidationMessage('请输入资源站点搜索URL')
+        return false
+      }
+
+      if (!remark) {
+        Swal.showValidationMessage('请输入备注')
+        return false
+      }
+
+      if (isPost && postData) {
+        try {
+          JSON.parse(postData)
+        } catch (e) {
+          Swal.showValidationMessage('POST请求参数必须是有效的JSON格式')
+          return false
+        }
+      }
+      
+      if ((adFilterItem === 'ad_name_regular_to_del_filter' || adFilterItem === 'ad_all_regular_to_del_filter') && !regularExpression) {
+        Swal.showValidationMessage('请输入正则表达式')
+        return false
+      } else if ((adFilterItem === 'ad_name_regular_to_del_filter' || adFilterItem === 'ad_all_regular_to_del_filter') && regularExpression) {
+        try {
+          new RegExp(regularExpression)
+        } catch(error) {
+          Swal.showValidationMessage('请输入正确的正则表达式')
+          return false
+        }
+      }
+
+      return { 
+        url, 
+        searchResultClass, 
+        remark, 
+        isPost, 
+        postData: isPost ? postData : undefined,
+        adFilterStatus,
+        adFilterItem,
+        regularExpression: (adFilterItem === 'ad_name_regular_to_del_filter' || adFilterItem === 'ad_all_regular_to_del_filter') ? regularExpression : undefined
+      }
+    }
+  })
+
+  isDialogOpen.value = false
+
+  if (result.isConfirmed && result.value) {
+    config.value.resourceSites.push({
+      url: result.value.url,
+      searchResultClass: result.value.searchResultClass,
+      remark: result.value.remark,
+      active: true,
+      isPost: result.value.isPost,
+      postData: result.value.postData,
+      adFilter: {
+        status: result.value.adFilterStatus,
+        item: result.value.adFilterItem,
+        regularExpression: result.value.regularExpression
+      }
+    })
+    await Swal.fire({
+      title: '添加成功',
+      icon: 'success',
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 2000,
+      timerProgressBar: true,
+      background: isDark.value ? '#1F2937' : '#FFFFFF',
+      color: isDark.value ? '#FFFFFF' : '#000000',
+      customClass: {
+        timerProgressBar: '!bg-primary-light/50 dark:!bg-primary-dark/50'
+      },
+      didOpen: (toast) => {
+        toast.addEventListener('mouseenter', Swal.stopTimer)
+        toast.addEventListener('mouseleave', Swal.resumeTimer)
+      }
+    })
+  }
+}
+
+const editResourceSite = async (index: number) => {
+  isDialogOpen.value = true
+  const site = config.value.resourceSites[index]
+  
+  // 设置广告过滤的默认值
+  const adFilter = site.adFilter || { status: true, item: 'default_del_ad_tag_to_filter' }
+  
+  const result = await Swal.fire({
+    title: '编辑资源站点',
+    titleText: '编辑资源站点',
+    customClass: {
+      title: 'text-xl font-medium',
+      popup: 'swal2-popup',
+      htmlContainer: '!mb-20',
+      validationMessage: '!absolute !bottom-20 !left-6 !right-6 !m-0 !p-0 text-red-500 text-sm',
+      actions: '!block',
+      confirmButton: '!absolute !right-6 !bottom-6 !shadow-none !ring-0',
+      cancelButton: '!absolute !left-6 !bottom-6 !shadow-none'
+    },
+    html: `
+      <input
+        id="siteUrl"
+        class="w-full p-2 mb-3 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm"
+        placeholder="输入资源站点搜索URL（如：https://test.com/search?keyword=）"
+        value="${site.url}"
+      />
+      <div class="flex items-center mb-3">
+        <label class="flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            id="isPost"
+            class="sr-only peer"
+            ${site.isPost ? 'checked' : ''}
+          />
+          <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-light dark:peer-checked:bg-primary-dark"></div>
+          <span class="ms-3 text-sm font-medium text-gray-900 dark:text-gray-300">使用POST请求</span>
+        </label>
+        <a 
+          href="javascript:void(0)" 
+          class="ml-4 text-sm text-primary-light dark:text-primary-dark hover:underline"
+          onclick="document.getElementById('postData').value = JSON.stringify({'搜索参数key':'{search_value}','其他参数key':'其他参数value'}, null, 4)"
+        >
+          参数模板
+        </a>
+      </div>
+      <div id="postDataContainer" class="${site.isPost ? '' : 'hidden'} mb-3">
+        <textarea
+          id="postData"
+          class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm max-h-[150px] min-h-[50px] overflow-y-auto"
+          placeholder="输入POST请求参数（JSON格式）"
+          rows="4"
+        >${site.postData || ''}</textarea>
+      </div>
+      <input
+        id="siteSearchResultClass"
+        class="w-full p-2 mb-3 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm"
+        placeholder="输入搜索结果列表类名（IPTV、api时为空）"
+        value="${site.searchResultClass || ''}"
+      />
+      <div class="mb-3">
+        <div class="flex items-center mb-2">
+          <label class="flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              id="adFilterStatus"
+              class="sr-only peer"
+              ${adFilter.status ? 'checked' : ''}
+            />
+            <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-light dark:peer-checked:bg-primary-dark"></div>
+            <span class="ms-3 text-sm font-medium text-gray-900 dark:text-gray-300">启用广告过滤</span>
+          </label>
+        </div>
+        <select 
+          id="adFilterItem" 
+          class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm"
+        >
+          <option value="default_del_ad_tag_to_filter" ${adFilter.item === 'default_del_ad_tag_to_filter' ? 'selected' : ''}>默认通用广告过滤（base）</option>
+          <option value="ad_tag_to_del_filter" ${adFilter.item === 'ad_tag_to_del_filter' ? 'selected' : ''}>根据标识删除过滤</option>
+          <option value="ad_name_len_to_del_filter" ${adFilter.item === 'ad_name_len_to_del_filter' ? 'selected' : ''}>根据名称长度删除过滤</option>
+          <option value="ad_name_regular_to_del_filter" ${adFilter.item === 'ad_name_regular_to_del_filter' ? 'selected' : ''}>自定义正则匹配删除过滤（分片）</option>
+          <option value="ad_all_regular_to_del_filter" ${adFilter.item === 'ad_all_regular_to_del_filter' ? 'selected' : ''}>自定义正则匹配删除过滤（全局）</option>
+        </select>
+        <div id="regularExpressionContainer" class="mt-2 ${(adFilter.item === 'ad_name_regular_to_del_filter' || adFilter.item === 'ad_all_regular_to_del_filter') ? '' : 'hidden'}">
+          <input
+            id="regularExpression"
+            class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm"
+            placeholder="输入正则表达式"
+            value="${adFilter.regularExpression || ''}"
+          />
+        </div>
+      </div>
+      <input
+        id="siteRemark"
+        class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark text-sm"
+        placeholder="输入备注"
+        value="${site.remark}"
+      />
+    `,
+    showCancelButton: true,
+    confirmButtonText: '保存',
+    cancelButtonText: '取消',
+    confirmButtonColor: '#3B82F6',
+    cancelButtonColor: '#6B7280',
+    background: isDark.value ? '#1F2937' : '#FFFFFF',
+    color: isDark.value ? '#FFFFFF' : '#000000',
+    buttonsStyling: true,
+    showClass: {
+      backdrop: 'swal2-noanimation',
+      popup: 'swal2-noanimation'
+    },
+    hideClass: {
+      popup: ''
+    },
+    didOpen: () => {
+      const isPostCheckbox = document.getElementById('isPost') as HTMLInputElement
+      const postDataContainer = document.getElementById('postDataContainer')
+      
+      isPostCheckbox.addEventListener('change', () => {
+        if (postDataContainer) {
+          postDataContainer.classList.toggle('hidden', !isPostCheckbox.checked)
+        }
+      })
+      
+      // 添加广告过滤相关的事件监听
+      const adFilterItem = document.getElementById('adFilterItem') as HTMLSelectElement
+      const regularExpressionContainer = document.getElementById('regularExpressionContainer')
+      
+      adFilterItem.addEventListener('change', () => {
+        if (regularExpressionContainer) {
+          regularExpressionContainer.classList.toggle('hidden', adFilterItem.value !== 'ad_name_regular_to_del_filter' && adFilterItem.value !== 'ad_all_regular_to_del_filter')
+        }
+      })
+    },
+    preConfirm: () => {
+      const url = (document.getElementById('siteUrl') as HTMLInputElement).value.trim()
+      const searchResultClass = (document.getElementById('siteSearchResultClass') as HTMLInputElement).value.trim()
+      const remark = (document.getElementById('siteRemark') as HTMLInputElement).value.trim()
+      const isPost = (document.getElementById('isPost') as HTMLInputElement).checked
+      const postData = (document.getElementById('postData') as HTMLTextAreaElement).value.trim()
+      
+      // 获取广告过滤相关的值
+      const adFilterStatus = (document.getElementById('adFilterStatus') as HTMLInputElement).checked
+      const adFilterItem = (document.getElementById('adFilterItem') as HTMLSelectElement).value
+      const regularExpression = (document.getElementById('regularExpression') as HTMLInputElement).value.trim()
+
+      if (!url) {
+        Swal.showValidationMessage('请输入资源站点搜索URL')
+        return false
+      }
+
+      if (!remark) {
+        Swal.showValidationMessage('请输入备注')
+        return false
+      }
+
+      if (isPost && postData) {
+        try {
+          JSON.parse(postData)
+        } catch (e) {
+          Swal.showValidationMessage('POST请求参数必须是有效的JSON格式')
+          return false
+        }
+      }
+      
+      if ((adFilterItem === 'ad_name_regular_to_del_filter' || adFilterItem === 'ad_all_regular_to_del_filter') && !regularExpression) {
+        Swal.showValidationMessage('请输入正则表达式')
+        return false
+      } else if ((adFilterItem === 'ad_name_regular_to_del_filter' || adFilterItem === 'ad_all_regular_to_del_filter') && regularExpression) {
+        try {
+          new RegExp(regularExpression)
+        } catch(error) {
+          Swal.showValidationMessage('请输入正确的正则表达式')
+          return false
+        }
+      }
+
+      return { 
+        url, 
+        searchResultClass, 
+        remark, 
+        isPost, 
+        postData: isPost ? postData : undefined,
+        adFilterStatus,
+        adFilterItem,
+        regularExpression: (adFilterItem === 'ad_name_regular_to_del_filter' || adFilterItem === 'ad_all_regular_to_del_filter') ? regularExpression : ''
+      }
+    }
+  })
+
+  isDialogOpen.value = false
+
+  if (result.isConfirmed && result.value) {
+    config.value.resourceSites[index] = {
+      ...config.value.resourceSites[index],
+      url: result.value.url,
+      searchResultClass: result.value.searchResultClass,
+      remark: result.value.remark,
+      isPost: result.value.isPost,
+      postData: result.value.postData,
+      adFilter: {
+        status: result.value.adFilterStatus,
+        item: result.value.adFilterItem,
+        regularExpression: result.value.regularExpression
+      }
+    }
+    await Swal.fire({
+      title: '保存成功',
+      icon: 'success',
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 2000,
+      timerProgressBar: true,
+      background: isDark.value ? '#1F2937' : '#FFFFFF',
+      color: isDark.value ? '#FFFFFF' : '#000000',
+      customClass: {
+        timerProgressBar: '!bg-primary-light/50 dark:!bg-primary-dark/50'
+      },
+      didOpen: (toast) => {
+        toast.addEventListener('mouseenter', Swal.stopTimer)
+        toast.addEventListener('mouseleave', Swal.resumeTimer)
+      }
+    })
+  }
+}
+
+// 保存配置
+const saveConfig = async () => {
+  try {
+    const token = sessionStorage.getItem('adminToken')
+    if (!token) {
+      throw new Error('未登录')
+    }
+
+    // 处理所有输入值，去除前后空格
+    const processedConfig = {
+      ...config.value,
+      backgroundImage: config.value.backgroundImage?.trim() || '',
+      announcement: config.value.announcement?.trim() || '',
+      customTitle: config.value.customTitle?.toString().trim() || '',
+      // 使用明文密码
+      loginPassword: plainPassword.value.trim()
+    }
+
+    isDialogOpen.value = true
+    const result = await Swal.fire({
+      title: '保存配置',
+      html: '确定要保存当前配置吗？',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      confirmButtonColor: '#3B82F6',
+      cancelButtonColor: '#6B7280',
+      background: isDark.value ? '#1F2937' : '#FFFFFF',
+      color: isDark.value ? '#FFFFFF' : '#000000',
+      customClass: {
+        title: 'text-xl font-medium',
+        popup: 'swal2-popup',
+        htmlContainer: '!mb-20',
+        actions: '!block',
+        confirmButton: '!absolute !right-6 !bottom-6 !shadow-none !ring-0',
+        cancelButton: '!absolute !left-6 !bottom-6 !shadow-none'
+      },
+      buttonsStyling: true,
+      showClass: {
+        backdrop: 'swal2-noanimation',
+        popup: 'swal2-noanimation'
+      },
+      hideClass: {
+        popup: ''
+      }
+    })
+
+    isDialogOpen.value = false
+
+    if (result.isConfirmed) {
+      const response = await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(processedConfig)
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || '保存失败')
+      }
+
+      // 显示成功提示
+      await Swal.fire({
+        title: '保存成功',
+        icon: 'success',
         toast: true,
-        position: 'top',
-        icon: 'error',
-        title: '导入配置失败，请检查文件格式',
+        position: 'top-end',
         showConfirmButton: false,
-        timer: 2000
+        timer: 2000,
+        timerProgressBar: true,
+        background: isDark.value ? '#1F2937' : '#FFFFFF',
+        color: isDark.value ? '#FFFFFF' : '#000000',
+        customClass: {
+          timerProgressBar: '!bg-primary-light/50 dark:!bg-primary-dark/50'
+        },
+        didOpen: (toast) => {
+          toast.addEventListener('mouseenter', Swal.stopTimer)
+          toast.addEventListener('mouseleave', Swal.resumeTimer)
+        }
       })
     }
+  } catch (error) {
+    console.error('保存配置失败:', error)
+    // 显示错误提示
+    await Swal.fire({
+      title: '保存失败',
+      text: error instanceof Error ? error.message : '未知错误',
+      icon: 'error',
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 2000,
+      timerProgressBar: true,
+      background: isDark.value ? '#1F2937' : '#FFFFFF',
+      color: isDark.value ? '#FFFFFF' : '#000000',
+      customClass: {
+        timerProgressBar: '!bg-primary-light/50 dark:!bg-primary-dark/50'
+      },
+      didOpen: (toast) => {
+        toast.addEventListener('mouseenter', Swal.stopTimer)
+        toast.addEventListener('mouseleave', Swal.resumeTimer)
+      }
+    })
   }
-  
-  reader.readAsText(file)
-  
-  // 重置input，允许再次选择同一文件
-  input.value = ''
 }
 
-// 触发文件选择对话框
-const triggerFileInput = () => {
-  const fileInput = document.getElementById('site-config-file-input') as HTMLInputElement
-  fileInput?.click()
+const handleExportConfig = () => {
+  // 导出完整的resourceSites配置，包括active状态
+  const exportConfig = config.value.resourceSites
+
+  // 创建Blob对象
+  const blob = new Blob([JSON.stringify(exportConfig, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  
+  // 创建下载链接并触发下载
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'video_harvest_site_config.json'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+
+  // 显示成功提示
+  Swal.fire({
+    title: '导出成功',
+    icon: 'success',
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 2000,
+    timerProgressBar: true,
+    background: isDark.value ? '#1F2937' : '#FFFFFF',
+    color: isDark.value ? '#FFFFFF' : '#000000',
+    customClass: {
+      timerProgressBar: '!bg-primary-light/50 dark:!bg-primary-dark/50'
+    }
+  })
 }
 
-// 处理取消
-const handleCancel = () => {
-  localConfig.value = { ...props.config }
-  // 重新初始化激活状态
-  initActiveStatus()
-  // 清除错误信息
-  errorMessage.value = ''
-  showDialog.value = false
+const handleImportConfig = async () => {
+  try {
+    // 创建文件输入元素
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+
+      // 限制文件大小为 1MB
+      const maxSizeInBytes = 1 * 1024 * 1024;
+      if (file.size > maxSizeInBytes) {
+        await Swal.fire({
+          title: '文件过大',
+          text: '请上传小于 1MB 的文件。',
+          icon: 'error',
+          background: isDark.value ? '#1F2937' : '#FFFFFF',
+          color: isDark.value ? '#FFFFFF' : '#000000'
+        });
+        return;
+      }
+
+      const reader = new FileReader()
+      reader.onload = async (event) => {
+        try {
+          const content = event.target?.result as string
+          const importedSites = JSON.parse(content)
+
+          // 验证导入的配置格式
+          if (!Array.isArray(importedSites)) {
+            throw new Error('无效的配置文件格式')
+          }
+
+          // 检查重复项并合并
+          const existingUrls = new Set(config.value.resourceSites.map(site => site.url))
+          const newSites: ResourceSite[] = []
+          const duplicateSites: ResourceSite[] = []
+
+          for (const site of importedSites as ResourceSite[]) {
+            if (existingUrls.has(site.url)) {
+              duplicateSites.push(site)
+            } else {
+              newSites.push({
+                ...site,
+                active: typeof site.active === 'boolean' ? site.active : true
+              })
+              existingUrls.add(site.url)
+            }
+          }
+
+          if (duplicateSites.length > 0) {
+            // 询问用户如何处理重复项
+            const result = await Swal.fire({
+              title: '发现重复的资源站点',
+              html: `
+                发现${duplicateSites.length}个重复的资源站点。<br>
+                请选择处理方式：<br>
+                - 跳过：保留现有配置<br>
+                - 覆盖：使用新的配置<br>
+                - 全部保留：保留所有配置
+              `,
+              icon: 'warning',
+              showDenyButton: true,
+              showCancelButton: true,
+              confirmButtonText: '覆盖',
+              denyButtonText: '全部保留',
+              cancelButtonText: '跳过',
+              background: isDark.value ? '#1F2937' : '#FFFFFF',
+              color: isDark.value ? '#FFFFFF' : '#000000'
+            })
+
+            if (result.isConfirmed) {
+              // 覆盖重复项
+              config.value.resourceSites = config.value.resourceSites.filter(site => 
+                !duplicateSites.some(dupSite => dupSite.url === site.url)
+              )
+              config.value.resourceSites.push(...duplicateSites.map(site => ({
+                ...site,
+                active: typeof site.active === 'boolean' ? site.active : true
+              })))
+            } else if (result.isDenied) {
+              // 保留所有配置（包括重复项）
+              config.value.resourceSites.push(...duplicateSites.map(site => ({
+                ...site,
+                active: typeof site.active === 'boolean' ? site.active : true
+              })))
+            }
+            // 如果是取消，则跳过重复项
+          }
+
+          // 添加新的非重复站点
+          config.value.resourceSites.push(...newSites)
+
+          // 显示成功提示
+          await Swal.fire({
+            title: '导入成功',
+            html: `
+              成功导入${newSites.length}个新站点<br>
+              ${duplicateSites.length > 0 ? `处理了${duplicateSites.length}个重复站点<br>` : ''}
+              记得点击【保存配置】按钮
+            `,
+            icon: 'success',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000,
+            timerProgressBar: true,
+            background: isDark.value ? '#1F2937' : '#FFFFFF',
+            color: isDark.value ? '#FFFFFF' : '#000000',
+            customClass: {
+              timerProgressBar: '!bg-primary-light/50 dark:!bg-primary-dark/50'
+            }
+          })
+        } catch (error) {
+          await Swal.fire({
+            title: '导入失败',
+            text: '请确保文件内容是有效的JSON格式',
+            icon: 'error',
+            background: isDark.value ? '#1F2937' : '#FFFFFF',
+            color: isDark.value ? '#FFFFFF' : '#000000'
+          })
+        }
+      }
+      reader.readAsText(file)
+    }
+
+    input.click()
+  } catch (error) {
+    console.error('导入配置失败:', error)
+    await Swal.fire({
+      title: '导入失败',
+      text: error instanceof Error ? error.message : '未知错误',
+      icon: 'error',
+      background: isDark.value ? '#1F2937' : '#FFFFFF',
+      color: isDark.value ? '#FFFFFF' : '#000000'
+    })
+  }
 }
 
 const handleOnlineImport = async () => {
@@ -573,10 +950,23 @@ const handleOnlineImport = async () => {
     showCancelButton: true,
     confirmButtonText: '导入',
     cancelButtonText: '取消',
+    confirmButtonColor: '#3B82F6',
     inputValidator: (value) => {
       if (!value) {
         return '请输入有效的URL！';
       }
+    },
+    customClass: {
+      actions: '!block',
+      confirmButton: '!shadow-none !ring-0',
+      cancelButton: '!shadow-none'
+    },
+    showClass: {
+      backdrop: 'swal2-noanimation',
+      popup: 'swal2-noanimation'
+    },
+    hideClass: {
+      popup: ''
     }
   });
 
@@ -601,7 +991,7 @@ const handleOnlineImport = async () => {
       }
 
       // 处理导入的站点
-      const existingUrls = new Set(localConfig.value.resourceSites.map(site => site.url));
+      const existingUrls = new Set(config.value.resourceSites.map(site => site.url));
       const newSites: ResourceSite[] = [];
 
       for (const site of importedSites as ResourceSite[]) {
@@ -615,26 +1005,28 @@ const handleOnlineImport = async () => {
       }
 
       // 添加新的非重复站点
-      localConfig.value.resourceSites.push(...newSites);
-      handleConfigUpdate();
+      config.value.resourceSites.push(...newSites);
 
       // 显示成功提示
       await Swal.fire({
-        toast: true,
-        position: 'top',
+        title: '导入成功',
+        text: `成功导入${newSites.length}个新站点`,
         icon: 'success',
-        title: `成功导入${newSites.length}个新站点`,
+        toast: true,
+        position: 'top-end',
         showConfirmButton: false,
-        timer: 2000
+        timer: 2000,
+        timerProgressBar: true,
+        background: isDark.value ? '#1F2937' : '#FFFFFF',
+        color: isDark.value ? '#FFFFFF' : '#000000',
       });
     } catch (error) {
       await Swal.fire({
-        toast: true,
-        position: 'top',
+        title: '导入失败',
+        text: error instanceof Error ? error.message : '未知错误',
         icon: 'error',
-        title: error instanceof Error ? error.message : '导入失败',
-        showConfirmButton: false,
-        timer: 2000
+        background: isDark.value ? '#1F2937' : '#FFFFFF',
+        color: isDark.value ? '#FFFFFF' : '#000000'
       });
     }
   }
@@ -642,491 +1034,400 @@ const handleOnlineImport = async () => {
 </script>
 
 <template>
-  <div v-if="showDialog" class="fixed inset-0 z-50 overflow-y-auto">
-    <div class="flex min-h-screen items-center justify-center p-4">
-      <div class="fixed inset-0 bg-black/30" @click="handleCancel"></div>
-      
-      <div class="relative w-full max-w-2xl min-h-[70vh] max-h-[80vh] flex flex-col rounded-lg bg-white dark:bg-gray-800 shadow-xl">
-        <!-- 头部 -->
-        <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-          <div class="flex items-center space-x-2 flex-1 min-w-0">
-            <div class="flex items-center flex-shrink-0">
-              <button 
-                @click="handleMasterSwitchToggle"
-                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors mr-2"
-                :class="masterSwitch ? 'bg-primary-light dark:bg-primary-dark' : 'bg-gray-200 dark:bg-gray-700'"
-              >
-                <span
-                  class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                  :class="masterSwitch ? 'translate-x-6' : 'translate-x-1'"
-                ></span>
-              </button>
-            </div>
-            <div class="flex items-center">
-              <h3 class="text-lg font-medium text-text-light dark:text-text-dark">前端配置</h3>
-              <div class="relative group ml-1">
-                <ExclamationCircleIcon class="h-5 w-5 text-amber-500 cursor-pointer" />
-                <div class="absolute left-0 top-5 whitespace-nowrap bg-gray-800 text-white text-sm py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-[0_0_10px_rgba(59,130,246,0.5)]">
-                  前端配置保存在浏览器本地
-                </div>
-              </div>
-              <span class="ml-1 text-sm text-gray-500 dark:text-gray-400">覆盖后端的</span>
-              <button 
-                @click="() => router.push('/admin')"
-                class="p-1 ml-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-                title="进入管理后台"
-              >
-                <Cog6ToothIcon class="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-          <button @click="handleCancel" class="text-gray-400 hover:text-gray-500 flex-shrink-0 ml-2">
-            <XMarkIcon class="h-6 w-6" />
-          </button>
-        </div>
-
-        <!-- 内容 -->
-        <div class="flex-1 overflow-y-auto p-4 space-y-6">
-          <!-- 剧集自动连播 -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center">
-                <label class="text-sm font-medium text-text-light dark:text-text-dark">剧集自动连播</label>
-                <div class="relative group ml-1">
-                  <ExclamationCircleIcon class="h-5 w-5 text-amber-500 cursor-pointer" />
-                  <div class="absolute left-0 top-5 whitespace-normal w-[calc(50vw-4rem)] max-w-md bg-gray-800 text-white text-sm py-2 px-3 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-[0_0_10px_rgba(59,130,246,0.5)]">
-                    启用剧集自动连播功能，可以自动播放下一集
-                  </div>
-                </div>
-              </div>
-              <button 
-                @click="handleToggle('autoPlayNext')"
-                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                :class="activeStatus.autoPlayNext ? 'bg-primary-light dark:bg-primary-dark' : 'bg-gray-200 dark:bg-gray-700'"
-              >
-                <span
-                  class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                  :class="activeStatus.autoPlayNext ? 'translate-x-6' : 'translate-x-1'"
-                ></span>
-              </button>
-            </div>
-          </div>
-
-          <!-- 豆瓣热门配置 -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center">
-                <label class="text-sm font-medium text-text-light dark:text-text-dark">豆瓣热门</label>
-                <div class="relative group ml-1">
-                  <ExclamationCircleIcon class="h-5 w-5 text-amber-500 cursor-pointer" />
-                  <div class="absolute left-0 top-5 whitespace-normal w-[calc(50vw-4rem)] max-w-md bg-gray-800 text-white text-sm py-2 px-3 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-[0_0_10px_rgba(59,130,246,0.5)]">
-                    启用豆瓣热门功能，可以快速浏览热门电影和电视剧，会在刷新按钮右侧显示热门按钮
-                  </div>
-                </div>
-              </div>
-              <button 
-                @click="handleToggle('enableHotMovies')"
-                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                :class="activeStatus.enableHotMovies ? 'bg-primary-light dark:bg-primary-dark' : 'bg-gray-200 dark:bg-gray-700'"
-              >
-                <span
-                  class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                  :class="activeStatus.enableHotMovies ? 'translate-x-6' : 'translate-x-1'"
-                ></span>
-              </button>
-            </div>
-            <input
-              v-if="activeStatus.enableHotMovies"
-              v-model="localConfig.hotMoviesProxyUrl"
-              @input="handleConfigUpdate"
-              placeholder="（可选）自定义代理URL请求豆瓣接口"
-              class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-            />
-            <input
-              v-if="activeStatus.enableHotMovies"
-              v-model="localConfig.hotTvDefaultTag"
-              @input="handleConfigUpdate"
-              placeholder="（可选）设置电视剧默认标签：国产剧"
-              class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-            />
-            <input
-              v-if="activeStatus.enableHotMovies"
-              v-model="localConfig.hotMovieDefaultTag"
-              @input="handleConfigUpdate"
-              placeholder="（可选）设置电影默认标签：科幻"
-              class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-            />
-          </div>
-
-          <!-- 资源站点配置 -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center space-x-2">
-                <label class="text-sm font-medium text-text-light dark:text-text-dark">资源站点配置</label>
-                <div class="relative group ml-1">
-                  <ExclamationCircleIcon class="h-5 w-5 text-amber-500 cursor-pointer" />
-                  <div class="absolute left-0 top-5 whitespace-normal w-[calc(50vw-4rem)] max-w-md bg-gray-800 text-white text-sm py-2 px-3 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-[0_0_10px_rgba(59,130,246,0.5)]">
-                    为空即默认使用后端配置
-                  </div>
-                </div>
-                <button
-                  @click="exportSiteConfig"
-                  class="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-                  title="导出资源站点配置"
-                >
-                  <ArrowDownTrayIcon class="h-4 w-4" />
-                </button>
-                <button
-                  @click="triggerFileInput"
-                  class="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-                  title="导入资源站点配置（.json后缀）"
-                >
-                  <ArrowUpTrayIcon class="h-4 w-4" />
-                </button>
-                <input
-                  id="site-config-file-input"
-                  type="file"
-                  accept=".json"
-                  @change="importSiteConfig"
-                  class="hidden"
-                />
-                <button
-                  @click="handleOnlineImport"
-                  class="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-                  title="在线导入资源站点配置"
-                >
-                  <CloudArrowUpIcon class="h-4 w-4" />
-                </button>
-              </div>
-              <button 
-                @click="handleToggle('resourceSites')"
-                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                :class="activeStatus.resourceSites ? 'bg-primary-light dark:bg-primary-dark' : 'bg-gray-200 dark:bg-gray-700'"
-              >
-                <span
-                  class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                  :class="activeStatus.resourceSites ? 'translate-x-6' : 'translate-x-1'"
-                ></span>
-              </button>
-            </div>
-            <div v-if="activeStatus.resourceSites" class="space-y-4">
-              <div 
-                v-for="(site, index) in localConfig.resourceSites" 
-                :key="index" 
-                :class="['space-y-2 p-4 border rounded-lg border-gray-200 dark:border-gray-700', `resource-site-item-${index}`]"
-              >
-                <div class="flex items-center justify-between">
-                  <label class="text-sm text-gray-500 dark:text-gray-400">支持IPTV URL<br>支持 MacCMS10 JSON API<br>MacCMS10 使用?ac=videolist&wd=<br>以上不能配置搜索结果列表类名</label>
-                  <button
-                    @click="handleRemoveSite(index)"
-                    class="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
-                    title="删除站点"
-                  >
-                    <TrashIcon class="h-5 w-5" />
-                  </button>
-                </div>
-                <div class="grid grid-cols-1 gap-2">
-                  <div class="flex items-center justify-between">
-                    <label class="text-sm text-text-light dark:text-text-dark">站点 #{{ index + 1 }} 启用 -></label>
-                    <button 
-                      @click="handleSiteToggle(index, 'active', !site.active)"
-                      class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                      :class="site.active ? 'bg-primary-light dark:bg-primary-dark' : 'bg-gray-200 dark:bg-gray-700'"
-                    >
-                      <span
-                        class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                        :class="site.active ? 'translate-x-6' : 'translate-x-1'"
-                      ></span>
-                    </button>
-                  </div>
-                  <input
-                    v-model="site.url"
-                    @input="(e: Event) => handleUpdateSite(index, 'url', (e.target as HTMLInputElement).value)"
-                    placeholder="输入资源站点搜索URL（如：https://test.com/search?keyword=）"
-                    class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-                  />
-                  <div class="flex items-center justify-between">
-                    <label class="text-sm text-text-light dark:text-text-dark">POST请求</label>
-                    <a 
-                      href="javascript:void(0)" 
-                      class="ml-4 text-sm text-primary-light dark:text-primary-dark hover:underline"
-                      @click="applyPostDataTemplate(index)"
-                    >
-                      参数模板
-                    </a>
-                    <button 
-                      @click="handleSiteToggle(index, 'isPost', !site.isPost)"
-                      class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                      :class="site.isPost ? 'bg-primary-light dark:bg-primary-dark' : 'bg-gray-200 dark:bg-gray-700'"
-                    >
-                      <span
-                        class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                        :class="site.isPost ? 'translate-x-6' : 'translate-x-1'"
-                      ></span>
-                    </button>
-                  </div>
-                  <textarea
-                    v-if="site.isPost"
-                    v-model="site.postData"
-                    @input="(e: Event) => handleUpdateSite(index, 'postData', (e.target as HTMLTextAreaElement).value)"
-                    placeholder="POST请求参数（JSON格式）"
-                    class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark min-h-[50px] max-h-[100px] resize-y"
-                  ></textarea>
-                  <input
-                    v-model="site.searchResultClass"
-                    @input="(e: Event) => handleUpdateSite(index, 'searchResultClass', (e.target as HTMLInputElement).value)"
-                    placeholder="输入搜索结果列表类名"
-                    class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-                  />
-                  <!-- 广告过滤配置 -->
-                  <div class="mt-2 space-y-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                    <div class="flex items-center justify-between">
-                      <label class="text-sm text-text-light dark:text-text-dark">广告过滤</label>
-                      <button 
-                        @click="handleAdFilterUpdate(index, 'status', !(site.adFilter?.status ?? true))"
-                        class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                        :class="(site.adFilter?.status ?? true) ? 'bg-primary-light dark:bg-primary-dark' : 'bg-gray-200 dark:bg-gray-700'"
-                      >
-                        <span
-                          class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                          :class="(site.adFilter?.status ?? true) ? 'translate-x-6' : 'translate-x-1'"
-                        ></span>
-                      </button>
-                    </div>
-                    <select
-                      :value="site.adFilter?.item || 'default_del_ad_tag_to_filter'"
-                      @change="(e: Event) => handleAdFilterUpdate(index, 'item', (e.target as HTMLSelectElement).value)"
-                      class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-                    >
-                      <option value="default_del_ad_tag_to_filter">默认通用广告过滤（base）</option>
-                      <option value="ad_tag_to_del_filter">根据标识删除过滤</option>
-                      <option value="ad_name_len_to_del_filter">根据名称长度删除过滤</option>
-                      <option value="ad_name_regular_to_del_filter">自定义正则匹配删除过滤（分片）</option>
-                      <option value="ad_all_regular_to_del_filter">自定义正则匹配删除过滤（全局）</option>
-                    </select>
-                    <!-- 正则表达式输入框，仅在选择 ad_name_regular_to_del_filter 或 ad_all_regular_to_del_filter 时显示 -->
-                    <input
-                      v-if="site.adFilter && (site.adFilter.item === 'ad_name_regular_to_del_filter' || site.adFilter.item === 'ad_all_regular_to_del_filter')"
-                      v-model="site.adFilter.regularExpression"
-                      @input="(e: Event) => handleAdFilterUpdate(index, 'regularExpression', (e.target as HTMLInputElement).value)"
-                      placeholder="输入正则表达式"
-                      class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-                    />
-                  </div>
-                  <input
-                    v-model="site.remark"
-                    @input="(e: Event) => handleUpdateSite(index, 'remark', (e.target as HTMLInputElement).value)"
-                    placeholder="输入备注"
-                    class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-                  />
-                </div>
-              </div>
-              <button
-                @click="handleAddSite"
-                class="w-full p-2 text-primary-light dark:text-primary-dark hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-              >
-                + 添加站点
-              </button>
-            </div>
-          </div>
-
-          <!-- 解析API配置 -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center">
-                <label class="text-sm font-medium text-text-light dark:text-text-dark">解析API配置</label>
-                <div class="relative group ml-1">
-                  <ExclamationCircleIcon class="h-5 w-5 text-amber-500 cursor-pointer" />
-                  <div class="absolute left-0 top-5 whitespace-normal w-[calc(50vw-4rem)] max-w-md bg-gray-800 text-white text-sm py-2 px-3 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-[0_0_10px_rgba(59,130,246,0.5)]">
-                    解析是前端直接请求完成，不会对服务器产生额外的流量，不会解析资源站点的视频，只解析页面的<br><br>
-                    去除解析页面的弹窗广告请安装：<br>https://greasyfork.org/zh-CN/scripts/535880-jx-filter-ad
-                  </div>
-                </div>
-              </div>
-              <button 
-                @click="handleToggle('parseApi')"
-                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                :class="activeStatus.parseApi ? 'bg-primary-light dark:bg-primary-dark' : 'bg-gray-200 dark:bg-gray-700'"
-              >
-                <span
-                  class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                  :class="activeStatus.parseApi ? 'translate-x-6' : 'translate-x-1'"
-                ></span>
-              </button>
-            </div>
-            <input
-              v-if="activeStatus.parseApi"
-              v-model="localConfig.parseApi"
-              @input="handleConfigUpdate"
-              placeholder="解析API地址，为空即不使用解析"
-              class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-            />
-          </div>
-
-          <!-- 视频代理URL配置 -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center">
-                <label class="text-sm font-medium text-text-light dark:text-text-dark">视频代理URL配置</label>
-                <div class="relative group ml-1">
-                  <ExclamationCircleIcon class="h-5 w-5 text-amber-500 cursor-pointer" />
-                  <div class="absolute left-0 top-5 whitespace-normal w-[calc(50vw-4rem)] max-w-md bg-gray-800 text-white text-sm py-2 px-3 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-[0_0_10px_rgba(59,130,246,0.5)]">
-                    视频代理是前端代理请求，URL会暴露在请求信息，但相对于后端代理请求而言，不会对服务器产生额外的流量<br><br>
-                    如果不配置该代理URL，直接前端完成请求；只有在请求重试都失败后，才尝试服务器后端代理 /api/proxy<br><br>
-                    只要配置了代理URL，无论是 视频 还是 直播 代理，那么在请求重试都失败后，也不会尝试服务器代理请求
-                  </div>
-                </div>
-              </div>
-              <button 
-                @click="handleToggle('proxyVideoUrl')"
-                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                :class="activeStatus.proxyVideoUrl ? 'bg-primary-light dark:bg-primary-dark' : 'bg-gray-200 dark:bg-gray-700'"
-              >
-                <span
-                  class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                  :class="activeStatus.proxyVideoUrl ? 'translate-x-6' : 'translate-x-1'"
-                ></span>
-              </button>
-            </div>
-            <input
-              v-if="activeStatus.proxyVideoUrl"
-              v-model="localConfig.proxyVideoUrl"
-              @input="handleConfigUpdate"
-              placeholder="视频代理URL地址，为空即不使用代理"
-              class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-            />
-          </div>
-
-          <!-- 直播代理URL配置 -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center">
-                <label class="text-sm font-medium text-text-light dark:text-text-dark">直播代理URL配置</label>
-                <div class="relative group ml-1">
-                  <ExclamationCircleIcon class="h-5 w-5 text-amber-500 cursor-pointer" />
-                  <div class="absolute left-0 top-5 whitespace-normal w-[calc(50vw-4rem)] max-w-md bg-gray-800 text-white text-sm py-2 px-3 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-[0_0_10px_rgba(59,130,246,0.5)]">
-                    直播代理是前端代理请求，URL会暴露在请求信息，但相对于后端代理请求而言，不会对服务器产生额外的流量<br><br>
-                    如果不配置该代理URL，那么http链接默认走的是服务器后端代理流量 /api/proxy，代理是为了能够正常请求<br><br>
-                    只要配置了代理URL，无论是 视频 还是 直播 代理，那么在请求重试都失败后，也不会尝试服务器代理请求
-                  </div>
-                </div>
-              </div>
-              <button 
-                @click="handleToggle('proxyLiveUrl')"
-                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                :class="activeStatus.proxyLiveUrl ? 'bg-primary-light dark:bg-primary-dark' : 'bg-gray-200 dark:bg-gray-700'"
-              >
-                <span
-                  class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                  :class="activeStatus.proxyLiveUrl ? 'translate-x-6' : 'translate-x-1'"
-                ></span>
-              </button>
-            </div>
-            <input
-              v-if="activeStatus.proxyLiveUrl"
-              v-model="localConfig.proxyLiveUrl"
-              @input="handleConfigUpdate"
-              placeholder="直播代理URL地址，为空即不使用代理"
-              class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-            />
-          </div>
-
-          <!-- 背景图片配置 -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <label class="text-sm font-medium text-text-light dark:text-text-dark">背景图片配置</label>
-              <button 
-                @click="handleToggle('backgroundImage')"
-                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                :class="activeStatus.backgroundImage ? 'bg-primary-light dark:bg-primary-dark' : 'bg-gray-200 dark:bg-gray-700'"
-              >
-                <span
-                  class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                  :class="activeStatus.backgroundImage ? 'translate-x-6' : 'translate-x-1'"
-                ></span>
-              </button>
-            </div>
-            <input
-              v-if="activeStatus.backgroundImage"
-              v-model="localConfig.backgroundImage"
-              @input="handleConfigUpdate"
-              placeholder="背景图片地址（多个用英文逗号隔开，随机显示），为空即不显示背景"
-              class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-            />
-          </div>
-
-          <!-- 公告配置 -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <label class="text-sm font-medium text-text-light dark:text-text-dark">公告配置</label>
-              <button 
-                @click="handleToggle('announcement')"
-                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                :class="activeStatus.announcement ? 'bg-primary-light dark:bg-primary-dark' : 'bg-gray-200 dark:bg-gray-700'"
-              >
-                <span
-                  class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                  :class="activeStatus.announcement ? 'translate-x-6' : 'translate-x-1'"
-                ></span>
-              </button>
-            </div>
-            <input
-              v-if="activeStatus.announcement"
-              v-model="localConfig.announcement"
-              @input="handleConfigUpdate"
-              placeholder="公告内容，为空即不显示公告"
-              class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-            />
-          </div>
-
-          <!-- 首页名称配置 -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <label class="text-sm font-medium text-text-light dark:text-text-dark">首页名称配置</label>
-              <button 
-                @click="handleToggle('customTitle')"
-                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                :class="activeStatus.customTitle ? 'bg-primary-light dark:bg-primary-dark' : 'bg-gray-200 dark:bg-gray-700'"
-              >
-                <span
-                  class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                  :class="activeStatus.customTitle ? 'translate-x-6' : 'translate-x-1'"
-                ></span>
-              </button>
-            </div>
-            <input
-              v-if="activeStatus.customTitle"
-              v-model="localConfig.customTitle"
-              @input="handleConfigUpdate"
-              placeholder="首页名称或图片链接，为空即默认图标"
-              class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
-            />
-          </div>
-        </div>
-
-        <!-- 底部按钮 -->
-        <div class="flex flex-col p-4 border-t border-gray-200 dark:border-gray-700">
-          <!-- 错误信息显示 -->
-          <div v-if="errorMessage" class="mb-3 p-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded text-sm text-center">
-            {{ errorMessage }}
-          </div>
-          
+  <div v-if="isLoading" class="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
+    <div class="text-center">
+      <div class="w-12 h-12 border-4 border-primary-light dark:border-primary-dark border-t-transparent rounded-full animate-spin mb-4"></div>
+      <p class="text-primary-light dark:text-primary-dark">加载中...</p>
+    </div>
+  </div>
+  
+  <template v-else-if="!isAuthenticated">
+    <div class="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
+      <div class="p-8 w-[360px] rounded-lg bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.3)] border border-gray-100/20 dark:border-gray-700/20">
+        <div class="space-y-4">
+          <input
+            type="password"
+            placeholder="请输入密码"
+            class="w-full p-3 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
+            @keyup.enter="handleAdminLogin"
+            @input="handlePasswordInput"
+            v-model="adminPassword"
+          />
+          <div v-if="loginError" class="text-red-500 text-sm">{{ loginError }}</div>
           <div class="flex justify-between">
             <button
-              @click="handleCancel"
-              class="px-4 py-2 text-gray-500 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300"
+              @click="router.push('/')"
+              class="w-24 p-3 bg-gray-500 text-white rounded relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-gray-500/20 active:scale-[0.98]"
             >
-              取消
+              首页
             </button>
             <button
-              @click="handleConfirm"
-              class="px-4 py-2 bg-primary-light dark:bg-primary-dark text-white rounded hover:bg-opacity-90"
+              @click="handleAdminLogin"
+              class="w-24 p-3 bg-primary-light dark:bg-primary-dark text-white rounded relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-primary-light/20 dark:hover:shadow-primary-dark/20 active:scale-[0.98] hover:before:opacity-100 before:opacity-0 before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent before:transition-opacity before:duration-300"
             >
-              确定
+              登录
             </button>
           </div>
         </div>
       </div>
     </div>
+  </template>
+
+  <div v-else class="min-h-screen bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark p-6" :class="{ 'blur-[2px]': isDialogOpen }">
+    <div class="max-w-4xl mx-auto">
+      <div class="flex justify-between items-center mb-6">
+        <div class="flex items-center gap-3">
+          <button
+            @click="router.push('/')"
+            class="h-10 w-10 flex items-center justify-center rounded-lg bg-background-light dark:bg-background-dark text-primary-light dark:text-primary-dark hover:bg-gray-100 dark:hover:bg-gray-800"
+            title="返回首页"
+          >
+            <el-icon class="text-xl"><VideoPlay /></el-icon>
+          </button>
+          <h1 class="text-2xl font-bold">管理后台</h1>
+        </div>
+        <button
+          @click="toggleTheme"
+          class="h-10 w-10 flex items-center justify-center rounded-lg bg-background-light dark:bg-background-dark text-primary-light dark:text-primary-dark hover:bg-gray-100 dark:hover:bg-gray-800"
+          :title="isDark ? '切换到日间模式' : '切换到夜间模式'"
+        >
+          <el-icon class="text-xl"><component :is="isDark ? 'Sunny' : 'Moon'" /></el-icon>
+        </button>
+      </div>
+      
+      <div class="space-y-6">
+        <!-- 资源站点配置 -->
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+          <div class="flex flex-col sm:flex-row flex-wrap justify-between items-center gap-4 mb-4">
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
+              <el-icon class="text-xl text-primary-light dark:text-primary-dark"><Link /></el-icon>
+              <h2 class="text-xl font-semibold">资源站点配置</h2>
+            </div>
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-end flex-wrap">
+              <button
+                @click="handleExportConfig"
+                class="px-4 py-2 bg-orange-500 text-white rounded hover:opacity-90"
+              >
+                导出
+              </button>
+              <button
+                @click="handleImportConfig"
+                class="px-4 py-2 bg-green-500 text-white rounded hover:opacity-90"
+              >
+                导入
+              </button>
+              <button
+                @click="handleOnlineImport"
+                class="px-4 py-2 bg-green-600 text-white rounded hover:opacity-90"
+              >
+                在线导入
+              </button>
+              <button
+                @click="addResourceSite"
+                class="px-4 py-2 bg-primary-light dark:bg-primary-dark text-white rounded hover:opacity-90"
+              >
+                添加
+              </button>
+            </div>
+          </div>
+          <div class="space-y-4">
+            <div v-for="(site, index) in config.resourceSites" :key="index">
+              <div class="flex flex-col sm:flex-row gap-2 items-center bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+                <label class="relative flex items-center cursor-pointer shrink-0">
+                  <input
+                    v-model="site.active"
+                    type="checkbox"
+                    class="sr-only peer"
+                  />
+                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-light dark:peer-checked:bg-primary-dark"></div>
+                  <span class="sr-only">激活/暂停</span>
+                </label>
+                <div class="flex-1 flex flex-col sm:flex-row gap-2 min-w-0 w-full">
+                  <div class="w-full sm:w-[40%] min-w-0 p-2 rounded bg-gray-50 dark:bg-gray-700/30 flex items-center">
+                    <div class="truncate" :title="site.url">{{ site.url }}</div>
+                  </div>
+                  <div class="w-full sm:w-[30%] min-w-0 p-2 rounded bg-gray-50 dark:bg-gray-700/30">
+                    <div class="text-sm text-gray-500 dark:text-gray-400">搜索结果列表类名</div>
+                    <div class="truncate" :title="site.searchResultClass || '无'">{{ site.searchResultClass || '无' }}</div>
+                  </div>
+                  <div class="w-full sm:w-[30%] min-w-0 p-2 rounded bg-gray-50 dark:bg-gray-700/30">
+                    <div class="text-sm text-gray-500 dark:text-gray-400">备注</div>
+                    <div class="truncate" :title="site.remark || '无备注'">{{ site.remark || '无备注' }}</div>
+                  </div>
+                </div>
+                <div class="flex gap-2 shrink-0 mt-2 sm:mt-0">
+                  <button
+                    @click="editResourceSite(index)"
+                    class="h-10 w-10 flex items-center justify-center bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                    title="编辑"
+                  >
+                    <el-icon class="text-xl"><Edit /></el-icon>
+                  </button>
+                  <button
+                    @click="deleteResourceSite(index)"
+                    class="h-10 w-10 flex items-center justify-center bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                    title="删除"
+                  >
+                    <el-icon class="text-base"><CircleClose /></el-icon>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- API配置 -->
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+          <div class="flex items-center gap-2 mb-4">
+            <el-icon class="text-xl text-primary-light dark:text-primary-dark"><Monitor /></el-icon>
+            <h2 class="text-xl font-semibold">API 配置</h2>
+          </div>
+          <div class="space-y-4">
+            <div>
+              <label class="block mb-2">解析 API <br><span class="text-xs text-gray-500 dark:text-gray-400">( 是前端直接请求完成，不会对服务器产生额外的流量，不会解析资源站点的视频，只解析页面的 )</span><br><span class="text-xs text-gray-500 dark:text-gray-400">( 去除解析页面的弹窗广告请安装 https://greasyfork.org/zh-CN/scripts/535880-jx-filter-ad )</span></label>
+              <input
+                v-model="config.parseApi"
+                type="text"
+                class="w-[200px] p-2 rounded border-[0.5px] border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:outline-none focus:border-primary-light dark:focus:border-primary-dark focus:w-full transition-[width] duration-200"
+                placeholder="输入解析API地址"
+              />
+            </div>
+            <div>
+              <label class="block mb-2">视频代理 URL <br><span class="text-xs text-gray-500 dark:text-gray-400">( 是前端代理请求，URL会暴露在请求信息，但相对于后端代理请求而言，不会对服务器产生额外的流量 )</span><br><span class="text-xs text-gray-500 dark:text-gray-400">( 如果不配置该代理URL，直接前端完成请求；只有在请求重试都失败后，才尝试服务器后端代理 /api/proxy )</span><br><span class="text-xs text-gray-500 dark:text-gray-400">( 只要配置了代理URL，无论是 视频 还是 直播 代理，那么在请求重试都失败后，也不会尝试服务器代理请求 )</span></label>
+              <input
+                v-model="config.proxyVideoUrl"
+                type="text"
+                class="w-[200px] p-2 rounded border-[0.5px] border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:outline-none focus:border-primary-light dark:focus:border-primary-dark focus:w-full transition-[width] duration-200"
+                placeholder="输入视频代理URL地址"
+              />
+            </div>
+            <div>
+              <label class="block mb-2">直播代理 URL <br><span class="text-xs text-gray-500 dark:text-gray-400">( 是前端代理请求，URL会暴露在请求信息，但相对于后端代理请求而言，不会对服务器产生额外的流量 )</span><br><span class="text-xs text-gray-500 dark:text-gray-400">( 如果不配置该代理URL，那么http链接默认走的是服务器后端代理流量 /api/proxy，代理是为了能够正常请求 )</span><br><span class="text-xs text-gray-500 dark:text-gray-400">( 只要配置了代理URL，无论是 视频 还是 直播 代理，那么在请求重试都失败后，也不会尝试服务器代理请求 )</span></label>
+              <input
+                v-model="config.proxyLiveUrl"
+                type="text"
+                class="w-[200px] p-2 rounded border-[0.5px] border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:outline-none focus:border-primary-light dark:focus:border-primary-dark focus:w-full transition-[width] duration-200"
+                placeholder="输入直播代理URL地址"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- 功能开关 -->
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+          <div class="flex items-center gap-2 mb-4">
+            <el-icon class="text-xl text-primary-light dark:text-primary-dark"><Setting /></el-icon>
+            <h2 class="text-xl font-semibold">功能开关</h2>
+          </div>
+          <div class="space-y-4">
+            <label class="flex items-center gap-3 cursor-pointer p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg group">
+              <div class="relative">
+                <input
+                  v-model="config.enableLogin"
+                  type="checkbox"
+                  class="sr-only peer"
+                />
+                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-light dark:peer-checked:bg-primary-dark"></div>
+              </div>
+              <span class="text-gray-700 dark:text-gray-200 group-hover:text-primary-light dark:group-hover:text-primary-dark transition-colors">
+                启用登录功能
+              </span>
+            </label>
+            
+            <!-- 登录密码配置 -->
+            <div v-if="config.enableLogin" class="mt-2 ml-14">
+              <div class="relative">
+                <input
+                  v-model="plainPassword"
+                  :type="showPassword ? 'text' : 'password'"
+                  class="w-full p-2 pr-10 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
+                  placeholder="设置登录密码"
+                />
+                <button
+                  @click="showPassword = !showPassword"
+                  type="button"
+                  class="absolute inset-y-0 right-0 px-3 flex items-center"
+                >
+                  <el-icon v-if="showPassword"><Hide /></el-icon>
+                  <el-icon v-else><View /></el-icon>
+                </button>
+              </div>
+            </div>
+            
+            <!-- 健康过滤开关 -->
+            <label class="flex items-center gap-3 cursor-pointer p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg group">
+              <div class="relative">
+                <input
+                  v-model="config.enableHealthFilter"
+                  type="checkbox"
+                  class="sr-only peer"
+                />
+                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-light dark:peer-checked:bg-primary-dark"></div>
+              </div>
+              <span class="text-gray-700 dark:text-gray-200 group-hover:text-primary-light dark:group-hover:text-primary-dark transition-colors">
+                启用健康过滤（搜索时，根据分类过滤掉不健康的资源，有的站点没有不健康的分类就过滤不了）
+              </span>
+            </label>
+            
+            <!-- 豆瓣热门功能开关 -->
+            <label class="flex items-center gap-3 cursor-pointer p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg group">
+              <div class="relative">
+                <input
+                  v-model="config.enableHotMovies"
+                  type="checkbox"
+                  class="sr-only peer"
+                />
+                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-light dark:peer-checked:bg-primary-dark"></div>
+              </div>
+              <span class="text-gray-700 dark:text-gray-200 group-hover:text-primary-light dark:group-hover:text-primary-dark transition-colors">
+                启用豆瓣热门功能
+              </span>
+            </label>
+            
+            <!-- 豆瓣代理URL配置 -->
+            <div v-if="config.enableHotMovies" class="mt-2 ml-14">
+              <input
+                v-model="config.hotMoviesProxyUrl"
+                type="text"
+                class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark mb-2"
+                placeholder="（可选）自定义代理URL请求豆瓣接口"
+              />
+              <input
+                v-model="config.hotTvDefaultTag"
+                type="text"
+                class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark mb-2"
+                placeholder="（可选）设置电视剧默认标签：国产剧"
+              />
+              <input
+                v-model="config.hotMovieDefaultTag"
+                type="text"
+                class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
+                placeholder="（可选）设置电影默认标签：科幻"
+              />
+            </div>
+            
+            <!-- 剧集自动连播开关 -->
+            <label class="flex items-center gap-3 cursor-pointer p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg group">
+              <div class="relative">
+                <input
+                  v-model="config.autoPlayNext"
+                  type="checkbox"
+                  class="sr-only peer"
+                />
+                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-light dark:peer-checked:bg-primary-dark"></div>
+              </div>
+              <span class="text-gray-700 dark:text-gray-200 group-hover:text-primary-light dark:group-hover:text-primary-dark transition-colors">
+                启用剧集自动连播
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 其他设置 -->
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+          <div class="flex items-center gap-2 mb-4">
+            <el-icon><Operation /></el-icon>
+            <h2 class="text-xl font-semibold">其他设置</h2>
+          </div>
+          <div class="space-y-4">
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                背景图片链接
+              </label>
+              <input
+                v-model="config.backgroundImage"
+                type="text"
+                class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
+                placeholder="输入图片链接（多个用英文逗号隔开，随机显示），为空即不显示背景"
+              />
+            </div>
+
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                自定义首页名称/logo
+              </label>
+              <input
+                v-model="config.customTitle"
+                type="text"
+                class="w-full p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-primary-light dark:focus:border-primary-dark"
+                placeholder="不配置则使用默认图标"
+              />
+            </div>
+
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                公告内容
+              </label>
+              <textarea
+                v-model="config.announcement"
+                rows="4"
+                class="w-full p-2 rounded border-[0.5px] border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:outline-none focus:border-primary-light dark:focus:border-primary-dark resize-none"
+                placeholder="输入公告内容"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- 保存按钮 -->
+        <div class="flex justify-end">
+          <button
+            @click="saveConfig"
+            class="px-6 py-2 bg-primary-light dark:bg-primary-dark text-white rounded hover:opacity-90 mx-0"
+          >
+            保存配置
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
-</template> 
+</template>
+
+<style>
+.icon {
+  font-size: 1.25em;
+  line-height: 1;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* 滚动条整体样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+/* 滚动条轨道 */
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+/* 滚动条滑块 */
+::-webkit-scrollbar-thumb {
+  background-color: #94a3b8;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+/* 鼠标悬停时的滑块样式 */
+::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b;
+}
+
+/* 适配深色模式 */
+.dark ::-webkit-scrollbar-thumb {
+  background-color: #475569;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b;
+}
+
+/* 隐藏水平滚动条 */
+.overflow-x-auto {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.overflow-x-auto::-webkit-scrollbar {
+  display: none;
+}
+</style>
