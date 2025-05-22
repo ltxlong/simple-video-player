@@ -4,6 +4,7 @@ import type { Config } from '../types'
 import { XMarkIcon, ExclamationCircleIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CloudArrowUpIcon, Cog6ToothIcon } from '@heroicons/vue/24/outline'
 import Swal from 'sweetalert2'
 import { useRouter } from 'vue-router'
+import { useTheme } from '../composables/useTheme'
 
 const props = defineProps<{
   modelValue: boolean
@@ -16,6 +17,7 @@ const emit = defineEmits<{
 }>()
 
 const router = useRouter()
+const { isDark } = useTheme()
 
 const localConfig = ref<Config>({ ...props.config })
 const tempConfig = ref<Config>({ ...props.config })
@@ -574,6 +576,8 @@ const handleOnlineImport = async () => {
     confirmButtonText: '导入',
     cancelButtonText: '取消',
     confirmButtonColor: '#3B82F6',
+    background: isDark.value ? '#1F2937' : '#FFFFFF',
+    color: isDark.value ? '#FFFFFF' : '#000000',
     inputValidator: (value) => {
       if (!value) {
         return '请输入有效的URL！';
