@@ -950,10 +950,23 @@ const handleOnlineImport = async () => {
     showCancelButton: true,
     confirmButtonText: '导入',
     cancelButtonText: '取消',
+    confirmButtonColor: '#3B82F6',
     inputValidator: (value) => {
       if (!value) {
         return '请输入有效的URL！';
       }
+    },
+    customClass: {
+      actions: '!block',
+      confirmButton: '!shadow-none !ring-0',
+      cancelButton: '!shadow-none'
+    },
+    showClass: {
+      backdrop: 'swal2-noanimation',
+      popup: 'swal2-noanimation'
+    },
+    hideClass: {
+      popup: ''
     }
   });
 
