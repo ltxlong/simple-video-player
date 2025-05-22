@@ -443,11 +443,27 @@ const exportSiteConfig = () => {
 }
 
 // 导入资源站点配置
-const importSiteConfig = (event: Event) => {
+const importSiteConfig = async (event: Event) => {
   const input = event.target as HTMLInputElement
   const file = input?.files?.[0]
   
   if (!file) return
+
+  // 限制文件大小为 1MB
+  const maxSizeInBytes = 1 * 1024 * 1024;
+  if (file.size > maxSizeInBytes) {
+    await Swal.fire({
+      toast: true,
+      position: 'top',
+      icon: 'error',
+      title: '请上传小于 1MB 的文件。',
+      showConfirmButton: false,
+      timer: 2000
+    });
+    
+    input.value = ''
+    return;
+  }
   
   const reader = new FileReader()
   reader.onload = (e) => {
