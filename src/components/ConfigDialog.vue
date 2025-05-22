@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import type { Config } from '../types'
-import { XMarkIcon, ExclamationCircleIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, Cog6ToothIcon } from '@heroicons/vue/24/outline'
+import { XMarkIcon, ExclamationCircleIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CloudArrowUpIcon, Cog6ToothIcon } from '@heroicons/vue/24/outline'
 import Swal from 'sweetalert2'
 import { useRouter } from 'vue-router'
 
@@ -106,6 +106,20 @@ const saveConfigToStorage = (config: Config) => {
 onMounted(() => {
   loadConfigFromStorage()
 })
+
+interface ResourceSite {
+  url: string
+  searchResultClass?: string
+  remark: string
+  active: boolean
+  isPost?: boolean
+  postData?: string
+  adFilter?: {
+    status: boolean
+    item: string
+    regularExpression?: string
+  }
+}
 
 // 计算属性用于控制弹窗显示
 const showDialog = computed({
@@ -550,6 +564,81 @@ const handleCancel = () => {
   errorMessage.value = ''
   showDialog.value = false
 }
+
+const handleOnlineImport = async () => {
+  const url = await Swal.fire({
+    title: '在线导入',
+    input: 'text',
+    inputLabel: '请输入JSON配置的URL',
+    showCancelButton: true,
+    confirmButtonText: '导入',
+    cancelButtonText: '取消',
+    inputValidator: (value) => {
+      if (!value) {
+        return '请输入有效的URL！';
+      }
+    }
+  });
+
+  if (url.isConfirmed && url.value) {
+    try {
+      const response = await fetch(url.value);
+      if (!response.ok) {
+        throw new Error('无法获取配置文件');
+      }
+
+      // 检查文件大小
+      const contentLength = response.headers.get('Content-Length');
+      if (contentLength && parseInt(contentLength) > 1 * 1024 * 1024) { // 1MB
+        throw new Error('文件大小超过1MB限制');
+      }
+
+      const importedSites = await response.json();
+
+      // 验证导入的配置格式
+      if (!Array.isArray(importedSites)) {
+        throw new Error('无效的配置文件格式');
+      }
+
+      // 处理导入的站点
+      const existingUrls = new Set(localConfig.value.resourceSites.map(site => site.url));
+      const newSites: ResourceSite[] = [];
+
+      for (const site of importedSites as ResourceSite[]) {
+        if (!existingUrls.has(site.url)) {
+          newSites.push({
+            ...site,
+            active: typeof site.active === 'boolean' ? site.active : true
+          });
+          existingUrls.add(site.url);
+        }
+      }
+
+      // 添加新的非重复站点
+      localConfig.value.resourceSites.push(...newSites);
+      handleConfigUpdate();
+
+      // 显示成功提示
+      await Swal.fire({
+        toast: true,
+        position: 'top',
+        icon: 'success',
+        title: `成功导入${newSites.length}个新站点`,
+        showConfirmButton: false,
+        timer: 2000
+      });
+    } catch (error) {
+      await Swal.fire({
+        toast: true,
+        position: 'top',
+        icon: 'error',
+        title: error instanceof Error ? error.message : '导入失败',
+        showConfirmButton: false,
+        timer: 2000
+      });
+    }
+  }
+}
 </script>
 
 <template>
@@ -701,6 +790,13 @@ const handleCancel = () => {
                   @change="importSiteConfig"
                   class="hidden"
                 />
+                <button
+                  @click="handleOnlineImport"
+                  class="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                  title="在线导入资源站点配置"
+                >
+                  <CloudArrowUpIcon class="h-4 w-4" />
+                </button>
               </div>
               <button 
                 @click="handleToggle('resourceSites')"
