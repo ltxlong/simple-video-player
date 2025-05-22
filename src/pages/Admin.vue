@@ -941,6 +941,83 @@ const handleImportConfig = async () => {
     })
   }
 }
+
+const handleOnlineImport = async () => {
+  const url = await Swal.fire({
+    title: '在线导入',
+    input: 'text',
+    inputLabel: '请输入JSON配置的URL',
+    showCancelButton: true,
+    confirmButtonText: '导入',
+    cancelButtonText: '取消',
+    inputValidator: (value) => {
+      if (!value) {
+        return '请输入有效的URL！';
+      }
+    }
+  });
+
+  if (url.isConfirmed && url.value) {
+    try {
+      const response = await fetch(url.value);
+      if (!response.ok) {
+        throw new Error('无法获取配置文件');
+      }
+
+      // 检查文件大小
+      const contentLength = response.headers.get('Content-Length');
+      if (contentLength && parseInt(contentLength) > 1 * 1024 * 1024) { // 1MB
+        throw new Error('文件大小超过1MB限制');
+      }
+
+      const importedSites = await response.json();
+
+      // 验证导入的配置格式
+      if (!Array.isArray(importedSites)) {
+        throw new Error('无效的配置文件格式');
+      }
+
+      // 处理导入的站点
+      const existingUrls = new Set(config.value.resourceSites.map(site => site.url));
+      const newSites: ResourceSite[] = [];
+
+      for (const site of importedSites as ResourceSite[]) {
+        if (!existingUrls.has(site.url)) {
+          newSites.push({
+            ...site,
+            active: typeof site.active === 'boolean' ? site.active : true
+          });
+          existingUrls.add(site.url);
+        }
+      }
+
+      // 添加新的非重复站点
+      config.value.resourceSites.push(...newSites);
+
+      // 显示成功提示
+      await Swal.fire({
+        title: '导入成功',
+        text: `成功导入${newSites.length}个新站点`,
+        icon: 'success',
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 2000,
+        timerProgressBar: true,
+        background: isDark.value ? '#1F2937' : '#FFFFFF',
+        color: isDark.value ? '#FFFFFF' : '#000000',
+      });
+    } catch (error) {
+      await Swal.fire({
+        title: '导入失败',
+        text: error instanceof Error ? error.message : '未知错误',
+        icon: 'error',
+        background: isDark.value ? '#1F2937' : '#FFFFFF',
+        color: isDark.value ? '#FFFFFF' : '#000000'
+      });
+    }
+  }
+}
 </script>
 
 <template>
@@ -1025,6 +1102,12 @@ const handleImportConfig = async () => {
                 class="px-4 py-2 bg-green-500 text-white rounded hover:opacity-90"
               >
                 导入
+              </button>
+              <button
+                @click="handleOnlineImport"
+                class="px-4 py-2 bg-green-600 text-white rounded hover:opacity-90"
+              >
+                在线导入
               </button>
               <button
                 @click="addResourceSite"
