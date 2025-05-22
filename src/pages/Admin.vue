@@ -812,6 +812,19 @@ const handleImportConfig = async () => {
       const file = (e.target as HTMLInputElement).files?.[0]
       if (!file) return
 
+      // 限制文件大小为 1MB
+      const maxSizeInBytes = 1 * 1024 * 1024;
+      if (file.size > maxSizeInBytes) {
+        await Swal.fire({
+          title: '文件过大',
+          text: '请上传小于 1MB 的文件。',
+          icon: 'error',
+          background: isDark.value ? '#1F2937' : '#FFFFFF',
+          color: isDark.value ? '#FFFFFF' : '#000000'
+        });
+        return;
+      }
+
       const reader = new FileReader()
       reader.onload = async (event) => {
         try {
