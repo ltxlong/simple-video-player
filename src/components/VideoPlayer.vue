@@ -533,9 +533,7 @@ const updatePlayerTitle = () => {
                   adFilterType.value = '当前：默认通用广告过滤'
               }
             } else {
-              if (displayText) displayText += ' - ';
-              displayText += '没过滤'
-              adFilterType.value = '当前：已关闭广告过滤'
+              adFilterType.value = '当前：未开启广告过滤'
             }
           } else {
             adFilterType.value = '当前：默认通用广告过滤'
@@ -1711,7 +1709,7 @@ function customLoaderFactory() {
   <iframe
     v-else
     ref="iframeContainer"
-    :src="getParseUrl(url)"
+    :src= "getParseUrl(url)"
     class="w-full aspect-video border-0"
     allowfullscreen
     frameborder="0"
