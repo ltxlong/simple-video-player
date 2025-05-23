@@ -10,6 +10,7 @@ import ConfigDialog from '../components/ConfigDialog.vue'
 import { BookmarkIcon, MagnifyingGlassIcon, ArrowPathIcon, PlayIcon, FireIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline'
 import router from '@/router'
 import HotMoviesDialog from '../components/HotMoviesDialog.vue'
+import Swal from 'sweetalert2'
 
 // 默认配置
 const defaultConfig: Config = {
@@ -154,6 +155,9 @@ const prevMasterSwitchEnabled = ref(false)
 // 添加跟踪激活资源站点数量的变量
 const prevActiveResourceSitesCount = ref(0)
 
+// 添加一个状态变量来跟踪用户是否已查看声明
+const hasSeenDisclaimer = ref(false)
+
 // 用于计算标题的函数
 const computedPageTitle = (customTitle: any) =>{
   if (!customTitle) {
@@ -259,10 +263,30 @@ const loadConfig = async () => {
     // 如果不需要登录，直接设置为已认证状态
     if (!configData.enableLogin) {
       isAuthenticated.value = true
+
+      // 检查是否已经查看过声明
+      const seenDisclaimer = localStorage.getItem('hasSeenDisclaimer')
+      if (seenDisclaimer === 'true') {
+        hasSeenDisclaimer.value = true
+      } else {
+        // 如果用户没有查看过声明，显示弹窗
+        showDisclaimerDialog()
+      }
     } else {
       // 如果需要登录，检查是否有token
       const token = sessionStorage.getItem('token')
       isAuthenticated.value = !!token
+
+      if (isAuthenticated.value) {
+        // 检查是否已经查看过声明
+        const seenDisclaimer = localStorage.getItem('hasSeenDisclaimer')
+        if (seenDisclaimer === 'true') {
+          hasSeenDisclaimer.value = true
+        } else {
+          // 如果用户没有查看过声明，显示弹窗
+          showDisclaimerDialog()
+        }
+      }
     }
 
     // 如果已认证，加载URL参数
@@ -916,6 +940,39 @@ const playNextEpisode = () => {
     updateCurrentTagTime(0, nextEpisode)
   }
 }
+
+// 显示声明弹窗的函数
+const showDisclaimerDialog = async () => {
+
+  const { isConfirmed } = await Swal.fire({
+    title: '使用声明',
+    html: '<div style="text-align: left;">请您了解并同意以下条款：<br><br> <span class="text-primary-light">免责声明：</span>本程序仅供内部学习和交流使用，请在遵守当地法律的前提下使用本站程序，对用户在使用过程中的自行维护的信息内容本程序不负任何责任！<br><br> <span class="text-primary-light">服务性质：</span>本站仅提供视频搜索服务，不直接提供、存储或上传任何视频内容。搜索结果均来自第三方公开接口！<br><br> <span class="text-primary-light">广告风险：</span>本站没有内置任何广告，请勿相信或点击视频中的任何广告内容，谨防上当受骗！</div>',
+    icon: 'warning',
+    confirmButtonText: '我已了解并接受',
+    showCancelButton: false,
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    background: isDark.value ? '#1F2937' : '#FFFFFF',
+    color: isDark.value ? '#FFFFFF' : '#000000',
+    customClass: {
+      popup: 'swal2-popup',
+      container: 'disclaimer-show',
+    },
+    buttonsStyling: true,
+    showClass: {
+      backdrop: 'swal2-noanimation',
+      popup: 'swal2-noanimation'
+    },
+    hideClass: {
+      popup: ''
+    }
+  });
+
+  if (isConfirmed) {
+    hasSeenDisclaimer.value = true;
+    localStorage.setItem('hasSeenDisclaimer', 'true');
+  }
+}
 </script>
 
 <template>
@@ -1396,5 +1453,9 @@ nav[aria-label="Tabs"]::-webkit-scrollbar-track {
 }
 .chevron-toggle-btn:hover, .chevron-toggle-btn:focus {
   height: 10rem !important;
+}
+
+.disclaimer-show {
+    backdrop-filter: blur(5px); /* 这里可以调整模糊程度 */
 }
 </style>
