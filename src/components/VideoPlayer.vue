@@ -1709,7 +1709,7 @@ function customLoaderFactory() {
   <iframe
     v-else
     ref="iframeContainer"
-    :src= "getParseUrl(url)"
+    :src="getParseUrl(url)"
     class="w-full aspect-video border-0"
     allowfullscreen
     frameborder="0"
